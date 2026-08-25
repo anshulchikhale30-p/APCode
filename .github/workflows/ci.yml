@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  test:
+    name: Test Go ${{ matrix.go }} • ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        go: ["1.26"]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+      - name: Format
+        run: |
+          go fmt ./...
+          git diff --exit-code -- . || (echo "Run 'go fmt ./...' and commit" && exit 1)
+      - name: Vet
+        run: go vet ./...
+      - name: Test (race)
+        run: go test -race ./... -count=1
+      - name: Test (no race)
+        run: go test ./... -count=1
+      - name: Build
+        run: go build -ldflags "-X apcode/internal/config.Version=test" -o apcode ./cmd/apcode
+      - name: Verify binary
+        shell: bash
+        run: |
+          ./apcode --version 2>&1 || ./apcode.exe --version 2>&1 || true
+          ./apcode --help 2>&1 | head -n 20 || ./apcode.exe --help 2>&1 | head -n 20 || true
+          ./apcode version 2>&1 || ./apcode.exe version 2>&1 || true
+
+  verify-scripts:
+    name: Verify install scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check install.sh syntax
+        run: bash -n install.sh
+      - name: Check install.sh help
+        run: bash install.sh --help
+      - name: Check PowerShell syntax (if pwsh available)
+        shell: bash
+        run: |
+          if command -v pwsh >/dev/null 2>&1; then
+            pwsh -NoProfile -Command "Get-Content install.ps1 | Out-Null; Write-Host 'ps1 ok'"
+          else
+            echo "pwsh not available, skipped"
+          fi

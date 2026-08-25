@@ -1,0 +1,26 @@
+{
+  "name": "apcode-ai",
+  "version": "0.1.0",
+  "description": "APCode — offline-first AI coding agent that adapts to your laptop",
+  "bin": {
+    "apcode": "./bin/apcode.js"
+  },
+  "scripts": {
+    "postinstall": "node ./install.js",
+    "test": "node ./bin/apcode.js --version"
+  },
+  "keywords": ["ai", "coding", "agent", "offline", "llm", "apcode"],
+  "author": "APCode",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/apcode/apcode.git"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "files": ["bin/", "install.js"],
+  "preferGlobal": true,
+  "os": ["darwin", "linux", "win32"],
+  "cpu": ["x64", "arm64"]
+}

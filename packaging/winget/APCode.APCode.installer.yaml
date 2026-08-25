@@ -1,0 +1,31 @@
+# WinGet installer manifest (split-file variant)
+# Alternative to the merged manifest. Use either merged or split, not both for submission.
+# This file is provided as a template for `manifests/a/APCode/APCode/0.1.0/` submission.
+# See https://learn.microsoft.com/en-us/windows/package-manager/package/manifest
+PackageIdentifier: APCode.APCode
+PackageVersion: 0.1.0
+InstallerType: zip
+InstallModes:
+  - interactive
+  - silent
+UpgradeBehavior: install
+Commands:
+  - apcode
+ReleaseDate: 2026-01-01
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip
+    InstallerSha256: REPLACE_WITH_SHA256_WINDOWS_AMD64
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: apcode.exe
+        PortableCommandAlias: apcode
+  - Architecture: arm64
+    InstallerUrl: https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_arm64.zip
+    InstallerSha256: REPLACE_WITH_SHA256_WINDOWS_ARM64
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: apcode.exe
+        PortableCommandAlias: apcode
+ManifestType: installer
+ManifestVersion: 1.6.0

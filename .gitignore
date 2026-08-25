@@ -1,0 +1,47 @@
+# Binaries and build artifacts
+apcode
+apcode.exe
+apcode_test_binary
+apcode_test_binary.exe
+dist/
+bin/
+*.out
+*.test
+
+# Models (large files)
+models/*.gguf
+models/*.bin
+models/*.safetensors
+!models/README.md
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Go
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local install test
+/tmp/
+apcode-test/
+apcode-bin/
+*.tmp
+
+# Node
+node_modules/
+npm/bin/apcode
+npm/bin/apcode.exe
+
+# Homebrew/Scoop build
+homebrew/*.tar.gz
+
+# WinGet
+packaging/winget/*.zip
+packaging/winget/*.tar.gz

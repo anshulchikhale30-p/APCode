@@ -1,0 +1,81 @@
+# WinGet manifest template for APCode
+# This is a merged single-file manifest (WinGet schema 1.6+ supports merged).
+# For submission, you can also split into multiple files under manifests/a/APCode/APCode/0.1.0/
+# Do NOT invent SHA256 hashes — replace REPLACE_WITH_SHA256_* after a real GitHub release.
+# See docs/packaging/winget.md for instructions.
+
+PackageIdentifier: APCode.APCode
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: APCode
+PublisherUrl: https://github.com/apcode/apcode
+PackageName: APCode
+PackageUrl: https://github.com/apcode/apcode
+ShortDescription: Offline-first AI coding agent that adapts to your laptop
+Description: |
+  APCode is an offline-first AI coding agent you install in your terminal.
+  It understands your hardware, recommends the right local model, and runs
+  100% offline — no cloud APIs, no data leaving your machine.
+  Features: hardware detection, benchmarking, model recommendation,
+  local model management, offline code search, and local inference via
+  native/llama.cpp/ollama runtimes.
+Moniker: apcode
+Tags:
+  - ai
+  - coding-agent
+  - offline
+  - llm
+  - terminal
+License: MIT
+LicenseUrl: https://github.com/apcode/apcode/blob/main/LICENSE
+Copyright: Copyright (c) 2026 APCode
+CopyrightUrl: https://github.com/apcode/apcode/blob/main/LICENSE
+ReleaseNotes: https://github.com/apcode/apcode/releases/tag/v0.1.0
+ReleaseNotesUrl: https://github.com/apcode/apcode/releases/tag/v0.1.0
+InstallationNotes: |
+  APCode is added to PATH as `apcode`. Restart your terminal or run:
+  $env:Path += ";$env:USERPROFILE\.apcode\bin"
+  Then: apcode --version, apcode --help, apcode recommend
+Documentations:
+  - DocumentLabel: README
+    DocumentUrl: https://github.com/apcode/apcode#readme
+  - DocumentLabel: Design Notes
+    DocumentUrl: https://github.com/apcode/apcode/blob/main/docs/design.md
+
+PackageFamilyName: APCode.APCode_8wekyb3d8bbwe # placeholder, not a Store app
+
+ManifestType: merged
+ManifestVersion: 1.6.0
+
+Installers:
+  - Architecture: x64
+    InstallerType: zip
+    InstallerUrl: https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip
+    InstallerSha256: REPLACE_WITH_SHA256_WINDOWS_AMD64
+    UpgradeBehavior: install
+    Commands:
+      - apcode
+    ReleaseDate: 2026-01-01
+    InstallerSwitches:
+      Custom: --version 0.1.0
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: apcode.exe
+        PortableCommandAlias: apcode
+  - Architecture: arm64
+    InstallerType: zip
+    InstallerUrl: https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_arm64.zip
+    InstallerSha256: REPLACE_WITH_SHA256_WINDOWS_ARM64
+    UpgradeBehavior: install
+    Commands:
+      - apcode
+    ReleaseDate: 2026-01-01
+    InstallerSwitches:
+      Custom: --version 0.1.0
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: apcode.exe
+        PortableCommandAlias: apcode
+
+# For WinGet validation (winget validate)
+# Run: winget validate packaging/winget/APCode.APCode.yaml

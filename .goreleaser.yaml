@@ -1,0 +1,115 @@
+# GoReleaser config for APCode — produces binaries like opencode's releases
+# Usage locally: goreleaser build --snapshot --clean
+# Usage release: goreleaser release --clean (triggered by git tag v*)
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: apcode
+    main: ./cmd/apcode
+    binary: apcode
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X apcode/internal/config.Version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    flags:
+      - -trimpath
+
+archives:
+  - id: apcode-archive
+    builds:
+      - apcode
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+      {{- if eq .Os "windows" }}.zip{{ else }}.tar.gz{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE*
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ .Tag }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+  groups:
+    - title: Features
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: "Bug fixes"
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: "Other"
+      order: 999
+
+release:
+  github:
+    owner: apcode
+    name: apcode
+  prerelease: auto
+  draft: false
+  footer: |
+    ### Install
+
+    ```sh
+    curl -fsSL https://raw.githubusercontent.com/apcode/apcode/main/install.sh | bash
+    ```
+
+    ```powershell
+    irm https://raw.githubusercontent.com/apcode/apcode/main/install.ps1 | iex
+    ```
+
+    Or download the binary for your platform below and add to PATH.
+
+    ### Verify
+
+    ```
+    apcode --version
+    apcode --help
+    ```
+
+brews:
+  - repository:
+      owner: apcode
+      name: homebrew-tap
+      branch: main
+    folder: Formula
+    homepage: https://github.com/apcode/apcode
+    description: "APCode — offline-first AI coding agent that adapts to your laptop"
+    license: "MIT"
+    # caveats: |
+    #   APCode is offline-first. Run `apcode recommend` to pick a model for your hardware.
+    install: |
+      bin.install "apcode"
+    test: |
+      system "#{bin}/apcode", "--version"
+
+nfpms: []
+# Future: aur, scoop, etc.
+
+signs: []
+docker_images: []

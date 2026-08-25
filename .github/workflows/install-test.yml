@@ -1,0 +1,54 @@
+name: Install Test
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1" # weekly Monday
+
+jobs:
+  test-unix-install:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build binary
+        run: go build -ldflags "-X apcode/internal/config.Version=test" -o /tmp/apcode ./cmd/apcode
+      - name: Test install.sh via --binary
+        run: |
+          bash install.sh --binary /tmp/apcode --dir /tmp/apcode-bin --no-modify-path
+          /tmp/apcode-bin/apcode --version
+          /tmp/apcode-bin/apcode version
+          /tmp/apcode-bin/apcode --help
+          /tmp/apcode-bin/apcode models
+          /tmp/apcode-bin/apcode recommend || true
+          /tmp/apcode-bin/apcode benchmark || true
+          /tmp/apcode-bin/apcode --no-color --help
+
+  test-windows-install:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: Build binary
+        shell: pwsh
+        run: |
+          $tmp = Join-Path $env:TEMP "apcode.exe"
+          go build -ldflags "-X apcode/internal/config.Version=test" -o $tmp ./cmd/apcode
+          Write-Host "Built to $tmp"
+          echo "APCODE_TMP=$tmp" >> $env:GITHUB_ENV
+      - name: Test install.ps1 via -Binary
+        shell: pwsh
+        run: |
+          $tmp = $env:APCODE_TMP
+          $installDir = Join-Path $env:TEMP "apcode-bin"
+          .\install.ps1 -Binary $tmp -InstallDir $installDir -NoModifyPath
+          & (Join-Path $installDir "apcode.exe") --version
+          & (Join-Path $installDir "apcode.exe") --help
+          & (Join-Path $installDir "apcode.exe") version
+          & (Join-Path $installDir "apcode.exe") models | Select-Object -First 5
+          & (Join-Path $installDir "apcode.exe") recommend | Select-Object -First 20
