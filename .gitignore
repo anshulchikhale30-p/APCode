@@ -1,10 +1,10 @@
 # Binaries and build artifacts
-apcode
-apcode.exe
-apcode_test_binary
-apcode_test_binary.exe
-dist/
-bin/
+/apcode
+/apcode.exe
+/apcode_test_binary
+/apcode_test_binary.exe
+/dist/
+/bin/
 *.out
 *.test
 
@@ -38,6 +38,7 @@ apcode-bin/
 node_modules/
 npm/bin/apcode
 npm/bin/apcode.exe
+!npm/bin/apcode.js
 
 # Homebrew/Scoop build
 homebrew/*.tar.gz
