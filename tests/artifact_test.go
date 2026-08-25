@@ -39,9 +39,9 @@ func TestReleaseArtifactNaming(t *testing.T) {
 }
 
 // TestInstallerRepoPlaceholder ensures installers do not use a fake repo
-// without the user being aware. The repo is apcode/apcode as placeholder.
+// without the user being aware. The repo is anshulchikhale30-p/APCode as placeholder.
 func TestInstallerRepoPlaceholder(t *testing.T) {
-	// This test documents that REPO="apcode/apcode" is used in:
+	// This test documents that REPO="anshulchikhale30-p/APCode" is used in:
 	// install.sh, install.ps1, npm/install.js, .goreleaser.yaml, Dockerfile, README.
 	// If the actual GitHub org differs, all must be updated.
 	// We verify that at least config.Version is set, so the repo placeholder is not

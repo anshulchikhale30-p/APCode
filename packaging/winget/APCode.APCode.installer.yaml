@@ -14,14 +14,14 @@ Commands:
 ReleaseDate: 2026-01-01
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip
+    InstallerUrl: https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip
     InstallerSha256: REPLACE_WITH_SHA256_WINDOWS_AMD64
     NestedInstallerType: portable
     NestedInstallerFiles:
       - RelativeFilePath: apcode.exe
         PortableCommandAlias: apcode
   - Architecture: arm64
-    InstallerUrl: https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_arm64.zip
+    InstallerUrl: https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/apcode_0.1.0_windows_arm64.zip
     InstallerSha256: REPLACE_WITH_SHA256_WINDOWS_ARM64
     NestedInstallerType: portable
     NestedInstallerFiles:

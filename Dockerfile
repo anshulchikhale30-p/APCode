@@ -19,6 +19,6 @@ COPY --from=builder /out/apcode /usr/local/bin/apcode
 WORKDIR /work
 ENTRYPOINT ["apcode"]
 CMD ["--help"]
-LABEL org.opencontainers.image.source="https://github.com/apcode/apcode"
+LABEL org.opencontainers.image.source="https://github.com/anshulchikhale30-p/APCode"
 LABEL org.opencontainers.image.description="APCode — offline-first AI coding agent"
 LABEL org.opencontainers.image.licenses="MIT"

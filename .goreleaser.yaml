@@ -68,19 +68,19 @@ changelog:
 
 release:
   github:
-    owner: apcode
-    name: apcode
+    owner: anshulchikhale30-p
+    name: APCode
   prerelease: auto
   draft: false
   footer: |
     ### Install
 
     ```sh
-    curl -fsSL https://raw.githubusercontent.com/apcode/apcode/main/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash
     ```
 
     ```powershell
-    irm https://raw.githubusercontent.com/apcode/apcode/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1 | iex
     ```
 
     Or download the binary for your platform below and add to PATH.
@@ -91,25 +91,3 @@ release:
     apcode --version
     apcode --help
     ```
-
-brews:
-  - repository:
-      owner: apcode
-      name: homebrew-tap
-      branch: main
-    folder: Formula
-    homepage: https://github.com/apcode/apcode
-    description: "APCode — offline-first AI coding agent that adapts to your laptop"
-    license: "MIT"
-    # caveats: |
-    #   APCode is offline-first. Run `apcode recommend` to pick a model for your hardware.
-    install: |
-      bin.install "apcode"
-    test: |
-      system "#{bin}/apcode", "--version"
-
-nfpms: []
-# Future: aur, scoop, etc.
-
-signs: []
-docker_images: []

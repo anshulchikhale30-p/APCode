@@ -7,7 +7,7 @@ const path = require("path");
 const https = require("https");
 const { execSync } = require("child_process");
 
-const REPO = "apcode/apcode";
+const REPO = "anshulchikhale30-p/APCode";
 const APP = "apcode";
 // Version is replaced at publish time; fallback to latest via API if 0.0.0
 let VERSION = "0.1.0";
@@ -156,7 +156,7 @@ async function main() {
 
 main().catch((e) => {
   console.error("APCode install failed:", e.message);
-  console.error("Try manual install: https://github.com/apcode/apcode#install");
-  console.error("Or: curl -fsSL https://raw.githubusercontent.com/apcode/apcode/main/install.sh | bash");
+  console.error("Try manual install: https://github.com/anshulchikhale30-p/APCode#install");
+  console.error("Or: curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash");
   process.exit(1);
 });

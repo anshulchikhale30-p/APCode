@@ -2,9 +2,9 @@ PackageIdentifier: APCode.APCode
 PackageVersion: 0.1.0
 PackageLocale: en-US
 Publisher: APCode
-PublisherUrl: https://github.com/apcode/apcode
+PublisherUrl: https://github.com/anshulchikhale30-p/APCode
 PackageName: APCode
-PackageUrl: https://github.com/apcode/apcode
+PackageUrl: https://github.com/anshulchikhale30-p/APCode
 ShortDescription: Offline-first AI coding agent that adapts to your laptop
 Description: |
   APCode is an offline-first AI coding agent you install in your terminal.
@@ -18,12 +18,12 @@ Tags:
   - llm
   - terminal
 License: MIT
-LicenseUrl: https://github.com/apcode/apcode/blob/main/LICENSE
+LicenseUrl: https://github.com/anshulchikhale30-p/APCode/blob/main/LICENSE
 Copyright: Copyright (c) 2026 APCode
-ReleaseNotes: https://github.com/apcode/apcode/releases/tag/v0.1.0
-ReleaseNotesUrl: https://github.com/apcode/apcode/releases/tag/v0.1.0
+ReleaseNotes: https://github.com/anshulchikhale30-p/APCode/releases/tag/v0.1.0
+ReleaseNotesUrl: https://github.com/anshulchikhale30-p/APCode/releases/tag/v0.1.0
 Documentations:
   - DocumentLabel: README
-    DocumentUrl: https://github.com/apcode/apcode#readme
+    DocumentUrl: https://github.com/anshulchikhale30-p/APCode#readme
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0

@@ -1,0 +1,17 @@
+{
+  "created_at": "2026-08-25T07:43:17+05:30",
+  "files_discovered": 86,
+  "languages": {
+    "Go": 68,
+    "JSON": 2,
+    "JavaScript": 1,
+    "Markdown": 7,
+    "Other": 2,
+    "Ruby": 1,
+    "Shell": 1,
+    "YAML": 4
+  },
+  "project_root": "C:\\Users\\user\\APCode",
+  "total_tokens": 155327,
+  "version": "0.1.0"
+}

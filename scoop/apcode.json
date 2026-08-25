@@ -1,32 +1,32 @@
 {
   "version": "0.1.0",
   "description": "APCode — offline-first AI coding agent that adapts to your laptop",
-  "homepage": "https://github.com/apcode/apcode",
+  "homepage": "https://github.com/anshulchikhale30-p/APCode",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip",
+      "url": "https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip",
       "hash": "REPLACE_WITH_SHA256_WINDOWS_AMD64",
       "bin": "apcode.exe"
     },
     "arm64": {
-      "url": "https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_arm64.zip",
+      "url": "https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/apcode_0.1.0_windows_arm64.zip",
       "hash": "REPLACE_WITH_SHA256_WINDOWS_ARM64",
       "bin": "apcode.exe"
     }
   },
   "checkver": {
-    "github": "https://github.com/apcode/apcode"
+    "github": "https://github.com/anshulchikhale30-p/APCode"
   },
   "autoupdate": {
     "architecture": {
       "64bit": {
-        "url": "https://github.com/apcode/apcode/releases/download/v$version/apcode_$version_windows_amd64.zip"
+        "url": "https://github.com/anshulchikhale30-p/APCode/releases/download/v$version/apcode_$version_windows_amd64.zip"
       },
       "arm64": {
-        "url": "https://github.com/apcode/apcode/releases/download/v$version/apcode_$version_windows_arm64.zip"
+        "url": "https://github.com/anshulchikhale30-p/APCode/releases/download/v$version/apcode_$version_windows_arm64.zip"
       }
     }
   },
-  "notes": "APCode is offline-first. Run 'apcode --help' to get started. Docs: https://github.com/apcode/apcode#readme"
+  "notes": "APCode is offline-first. Run 'apcode --help' to get started. Docs: https://github.com/anshulchikhale30-p/APCode#readme"
 }

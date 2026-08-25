@@ -14,7 +14,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/apcode/apcode.git"
+    "url": "https://github.com/anshulchikhale30-p/APCode.git"
   },
   "engines": {
     "node": ">=16"

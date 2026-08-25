@@ -6,9 +6,9 @@ Reproducible procedure to verify `v0.1.0` on a clean machine **without Go instal
 
 - Clean VM/container or new user account (no prior `apcode` in `PATH`, no `~/.apcode`).
 - Network access to `github.com` and `raw.githubusercontent.com`.
-- For binary test: download the correct artifact from `https://github.com/apcode/apcode/releases/tag/v0.1.0`.
+- For binary test: download the correct artifact from `https://github.com/anshulchikhale30-p/APCode/releases/tag/v0.1.0`.
 
-> Replace `apcode/apcode` with the actual GitHub org/repo if different. The `v0.1.0` tag must exist before testing download flows. For pre-release testing, use `--binary` with a local build.
+> Replace `anshulchikhale30-p/APCode` with the actual GitHub org/repo if different. The `v0.1.0` tag must exist before testing download flows. For pre-release testing, use `--binary` with a local build.
 
 ---
 
@@ -18,10 +18,10 @@ Reproducible procedure to verify `v0.1.0` on a clean machine **without Go instal
 
 ```powershell
 # Option A: Remote install (requires release published)
-irm https://raw.githubusercontent.com/apcode/apcode/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1 | iex
 
 # Option B: Specific version
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/apcode/apcode/main/install.ps1))) -Version 0.1.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1))) -Version 0.1.0
 
 # Option C: Local binary (for pre-release QA, no network)
 go build -o $env:TEMP\apcode.exe ./cmd/apcode   # build on a dev machine, copy to clean VM
@@ -135,13 +135,13 @@ apcode --version  # still 0.1.0
 
 ```sh
 # Remote (requires release)
-curl -fsSL https://raw.githubusercontent.com/apcode/apcode/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash
 
 # Specific version
-curl -fsSL https://raw.githubusercontent.com/apcode/apcode/main/install.sh | bash -s -- --version 0.1.0
+curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash -s -- --version 0.1.0
 
 # Custom dir
-curl -fsSL https://raw.githubusercontent.com/apcode/apcode/main/install.sh | bash -s -- --dir /usr/local/bin
+curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash -s -- --dir /usr/local/bin
 
 # Local binary (pre-release)
 go build -o /tmp/apcode ./cmd/apcode   # on dev machine, copy to clean VM
@@ -257,10 +257,10 @@ apcode --version
 scoop uninstall apcode
 ```
 
-After publication to `https://github.com/ScoopInstaller/Main` or a custom bucket `apcode/scoop-bucket`, users will:
+After publication to `https://github.com/ScoopInstaller/Main` or a custom bucket `anshulchikhale30-p/scoop-bucket`, users will:
 
 ```powershell
-scoop bucket add apcode https://github.com/apcode/scoop-bucket
+scoop bucket add apcode https://github.com/anshulchikhale30-p/scoop-bucket
 scoop install apcode
 ```
 
@@ -268,7 +268,7 @@ scoop install apcode
 
 ## Homebrew (macOS/Linux)
 
-> Formula `homebrew/apcode.rb` is a template; `apcode/homebrew-tap` must exist and be populated by GoReleaser. Not yet published.
+> Formula `homebrew/apcode.rb` is a template; `anshulchikhale30-p/homebrew-tap` must exist and be populated by GoReleaser. Not yet published.
 
 ```sh
 brew install --build-from-source ./homebrew/apcode.rb
@@ -277,7 +277,7 @@ brew test apcode
 brew uninstall apcode
 
 # After tap published:
-brew install apcode/tap/apcode
+brew install anshulchikhale30-p/tap/apcode
 ```
 
 ---

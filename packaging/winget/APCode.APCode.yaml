@@ -8,9 +8,9 @@ PackageIdentifier: APCode.APCode
 PackageVersion: 0.1.0
 PackageLocale: en-US
 Publisher: APCode
-PublisherUrl: https://github.com/apcode/apcode
+PublisherUrl: https://github.com/anshulchikhale30-p/APCode
 PackageName: APCode
-PackageUrl: https://github.com/apcode/apcode
+PackageUrl: https://github.com/anshulchikhale30-p/APCode
 ShortDescription: Offline-first AI coding agent that adapts to your laptop
 Description: |
   APCode is an offline-first AI coding agent you install in your terminal.
@@ -27,20 +27,20 @@ Tags:
   - llm
   - terminal
 License: MIT
-LicenseUrl: https://github.com/apcode/apcode/blob/main/LICENSE
+LicenseUrl: https://github.com/anshulchikhale30-p/APCode/blob/main/LICENSE
 Copyright: Copyright (c) 2026 APCode
-CopyrightUrl: https://github.com/apcode/apcode/blob/main/LICENSE
-ReleaseNotes: https://github.com/apcode/apcode/releases/tag/v0.1.0
-ReleaseNotesUrl: https://github.com/apcode/apcode/releases/tag/v0.1.0
+CopyrightUrl: https://github.com/anshulchikhale30-p/APCode/blob/main/LICENSE
+ReleaseNotes: https://github.com/anshulchikhale30-p/APCode/releases/tag/v0.1.0
+ReleaseNotesUrl: https://github.com/anshulchikhale30-p/APCode/releases/tag/v0.1.0
 InstallationNotes: |
   APCode is added to PATH as `apcode`. Restart your terminal or run:
   $env:Path += ";$env:USERPROFILE\.apcode\bin"
   Then: apcode --version, apcode --help, apcode recommend
 Documentations:
   - DocumentLabel: README
-    DocumentUrl: https://github.com/apcode/apcode#readme
+    DocumentUrl: https://github.com/anshulchikhale30-p/APCode#readme
   - DocumentLabel: Design Notes
-    DocumentUrl: https://github.com/apcode/apcode/blob/main/docs/design.md
+    DocumentUrl: https://github.com/anshulchikhale30-p/APCode/blob/main/docs/design.md
 
 PackageFamilyName: APCode.APCode_8wekyb3d8bbwe # placeholder, not a Store app
 
@@ -50,7 +50,7 @@ ManifestVersion: 1.6.0
 Installers:
   - Architecture: x64
     InstallerType: zip
-    InstallerUrl: https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip
+    InstallerUrl: https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip
     InstallerSha256: REPLACE_WITH_SHA256_WINDOWS_AMD64
     UpgradeBehavior: install
     Commands:
@@ -64,7 +64,7 @@ Installers:
         PortableCommandAlias: apcode
   - Architecture: arm64
     InstallerType: zip
-    InstallerUrl: https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_arm64.zip
+    InstallerUrl: https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/apcode_0.1.0_windows_arm64.zip
     InstallerSha256: REPLACE_WITH_SHA256_WINDOWS_ARM64
     UpgradeBehavior: install
     Commands:

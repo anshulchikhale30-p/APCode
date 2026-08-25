@@ -8,7 +8,7 @@
 
 APCode is an open source AI coding agent you install in your terminal. It understands your hardware, recommends the right local model, and runs 100% offline — no cloud APIs, no data leaving your machine.
 
-> **v0.1.0 is ready for release, but no GitHub Release exists yet.** The `install.sh`/`install.ps1` scripts work today via `--binary` with a local build. Remote `curl | bash` / `irm | iex` and `brew`/`scoop`/`npm`/`winget` will work **after** a real `v0.1.0` tag is pushed and GoReleaser publishes artifacts. See `CONTRIBUTING.md` and `docs/packaging/winget.md`.
+> **v0.1.1 is the next release.** No GitHub Release exists yet — the first release will be `v0.1.1`. The `install.sh`/`install.ps1` scripts work today via `--binary` with a local build. Remote `curl | bash` / `irm | iex` will work **after** a real `v0.1.1` tag is pushed and GoReleaser publishes artifacts. `brew`/`scoop`/`npm`/`winget`/`docker` are **future/planned** and not yet published. See `CONTRIBUTING.md` and `docs/release-test.md`.
 
 ---
 
@@ -21,31 +21,31 @@ The easiest way to install APCode is through the install script — just like `o
 **macOS & Linux:**
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/apcode/apcode/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash
 ```
 
 Install a specific version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/apcode/apcode/main/install.sh | bash -s -- --version 0.1.0
+curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash -s -- --version 0.1.0
 ```
 
 Install to a custom directory:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/apcode/apcode/main/install.sh | bash -s -- --dir /usr/local/bin
+curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash -s -- --dir /usr/local/bin
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
-irm https://raw.githubusercontent.com/apcode/apcode/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1 | iex
 ```
 
 Specific version:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/apcode/apcode/main/install.ps1))) -Version 0.1.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1))) -Version 0.1.0
 # or if you saved it locally:
 .\install.ps1 -Version 0.1.0
 ```
@@ -85,8 +85,8 @@ apcode             # branded TUI + hardware
 
 ```sh
 # From cloned repo (recommended, no registry required)
-git clone https://github.com/apcode/apcode
-cd apcode
+git clone https://github.com/anshulchikhale30-p/APCode
+cd APCode
 go build -o apcode ./cmd/apcode
 # or install to GOPATH/GOBIN (adds to $(go env GOPATH)/bin)
 go install ./cmd/apcode
@@ -108,18 +108,18 @@ yarn global add apcode-ai
 
 > The package downloads the matching release binary on `postinstall`. No Node runtime needed after install. For now, use the `install.sh`/`install.ps1` scripts.
 
-**Using Homebrew (macOS & Linux) — not yet published:**
+**Using Homebrew (macOS & Linux) — not yet published / future:**
 
-> Formula `homebrew/apcode.rb` is a template. After a real `v0.1.0` release, GoReleaser publishes to `apcode/homebrew-tap`. Until then:
+> Formula `homebrew/apcode.rb` is a template. After a real `v0.1.1` release, a Homebrew tap could be published to `anshulchikhale30-p/homebrew-tap` (not configured for first release). Until then:
 
 ```sh
 # Build from source locally:
 brew install --build-from-source ./homebrew/apcode.rb
-# After tap is published:
-brew install apcode/tap/apcode
+# After tap is published (future):
+brew install anshulchikhale30-p/tap/apcode
 ```
 
-> The tap `apcode/tap` will be updated on every release via GoReleaser.
+> The tap would be updated on every release via GoReleaser if configured — currently not configured for first release.
 
 **Using Scoop (Windows) — not yet published:**
 
@@ -129,7 +129,7 @@ brew install apcode/tap/apcode
 # Local test:
 scoop install ./scoop/apcode.json
 # After bucket is published:
-scoop bucket add apcode https://github.com/apcode/scoop-bucket
+scoop bucket add apcode https://github.com/anshulchikhale30-p/scoop-bucket
 scoop install apcode
 ```
 
@@ -151,7 +151,7 @@ choco install apcode
 
 **Manual binary download:**
 
-Grab the binary for your platform from [Releases](https://github.com/apcode/apcode/releases) (after `v0.1.0` is published):
+Grab the binary for your platform from [Releases](https://github.com/anshulchikhale30-p/APCode/releases) (after `v0.1.0` is published):
 
 | Platform | File |
 |---|---|
@@ -170,11 +170,13 @@ sudo mv apcode /usr/local/bin/
 apcode --version
 ```
 
-**Using Docker:**
+**Using Docker — planned / not yet published:**
+
+> Docker image `ghcr.io/anshulchikhale30-p/APCode` is **not yet published**. After a real `v0.1.1` GitHub release and `docker build`/`push`, users will be able to:
 
 ```sh
-docker run --rm -it ghcr.io/apcode/apcode --help
-docker run --rm -it -v $(pwd):/work ghcr.io/apcode/apcode recommend
+docker run --rm -it ghcr.io/anshulchikhale30-p/APCode --help
+docker run --rm -it -v $(pwd):/work ghcr.io/anshulchikhale30-p/APCode recommend
 ```
 
 ---
@@ -425,34 +427,33 @@ rm -f $(go env GOPATH)/bin/apcode
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and `docs/release-test.md` for the clean-install test. PRs welcome!
 
-### Releasing v0.1.0
+### Releasing v0.1.1
 
-1. Ensure `internal/config.Version` is `0.1.0` (single source; `npm/package.json`, `homebrew/apcode.rb`, `scoop/apcode.json`, `packaging/winget/*.yaml` are synced on release).
+1. Ensure `internal/config.Version` is `0.1.1` (single source; `npm/package.json`, `homebrew/apcode.rb`, `scoop/apcode.json`, `packaging/winget/*.yaml` are synced on release).
 2. `go fmt ./... && go vet ./... && go test ./... -count=1 && go test -race ./...`
-3. `go build -ldflags "-X apcode/internal/config.Version=0.1.0" -o /tmp/apcode ./cmd/apcode && /tmp/apcode --version` → `APCode 0.1.0`
-4. Commit and push to `main` on the real GitHub remote (currently `apcode/apcode` is a placeholder — must match `git remote -v`):
+3. `go build -ldflags "-X apcode/internal/config.Version=0.1.1" -o /tmp/apcode ./cmd/apcode && /tmp/apcode --version` → `APCode 0.1.1`
+4. Commit and push to `main` on GitHub remote (`anshulchikhale30-p/APCode`):
    ```sh
-   git init # if needed
-   git remote add origin https://github.com/<YOUR_ORG>/apcode.git
+   git remote -v  # should be https://github.com/anshulchikhale30-p/APCode.git
    git add .
-   git commit -m "release: v0.1.0"
+   git commit -m "release: v0.1.1"
    git push -u origin main
    ```
-5. Tag and push:
+5. Tag and push the next release (this triggers the release workflow):
    ```sh
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag v0.1.1
+   git push origin v0.1.1
    ```
-   GitHub Actions `release.yml` runs GoReleaser → creates GitHub Release with:
-   - `apcode_0.1.0_linux_amd64.tar.gz`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`, `windows_amd64.zip`, `windows_arm64.zip`, `checksums.txt`.
-6. After release, update hashes where needed:
-   - `npm`: `cd npm && npm version 0.1.0 && npm publish` (requires `npm login`).
-   - `homebrew`: GoReleaser auto-updates `apcode/homebrew-tap` if the `brews` repository exists and `GITHUB_TOKEN` has access; otherwise manually update `homebrew/apcode.rb` hashes from `checksums.txt`.
-   - `scoop`: Update `scoop/apcode.json` hashes and submit to `ScoopInstaller/Main` or your bucket.
-   - `winget`: Follow `docs/packaging/winget.md` to replace `REPLACE_WITH_SHA256_*` and submit to `microsoft/winget-pkgs`.
-   - `docker`: `docker build --build-arg VERSION=0.1.0 -t ghcr.io/<ORG>/apcode:0.1.0 . && docker push ghcr.io/<ORG>/apcode:0.1.0`
+   Pushing `v0.1.1` triggers GitHub Actions (`.github/workflows/release.yml`) which runs GoReleaser (`goreleaser release --clean`) → creates GitHub Release with:
+   - `apcode_0.1.1_linux_amd64.tar.gz`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`, `windows_amd64.zip`, `windows_arm64.zip`, `checksums.txt`.
+6. After release, update hashes where needed (all **future / not yet published** until verified):
+   - `npm`: `cd npm && npm version 0.1.1 && npm publish` (requires `npm login`) — **future**.
+   - `homebrew`: GoReleaser would publish to a tap if configured; currently **not configured** for first release, so manually update `homebrew/apcode.rb` hashes from `checksums.txt` if needed — **future**.
+   - `scoop`: Update `scoop/apcode.json` hashes and submit to `ScoopInstaller/Main` or your bucket — **future**.
+   - `winget`: Follow `docs/packaging/winget.md` to replace `REPLACE_WITH_SHA256_*` and submit to `microsoft/winget-pkgs` — **future**.
+   - `docker`: `docker build --build-arg VERSION=0.1.1 -t ghcr.io/anshulchikhale30-p/APCode:0.1.1 . && docker push ghcr.io/anshulchikhale30-p/APCode:0.1.1` — **future / planned**.
 
-Until those publishes are verified, **do not claim** `brew install`, `scoop install`, `npm install -g apcode-ai`, or `winget install APCode.APCode` work. The reliable install remains `install.sh`/`install.ps1` via `curl`/`irm` or manual binary from Releases. See `docs/release-test.md` for the full test matrix.
+Until those publishes are verified, **do not claim** `brew install`, `scoop install`, `npm install -g apcode-ai`, `docker run`, or `winget install APCode.APCode` work. The reliable install remains `install.sh`/`install.ps1` via `curl`/`irm` or manual binary from Releases. See `docs/release-test.md` for the full test matrix.
 
 ---
 

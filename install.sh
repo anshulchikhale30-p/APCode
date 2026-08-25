@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 APP=apcode
-REPO="apcode/apcode"
+REPO="anshulchikhale30-p/APCode"
 INSTALL_DIR="${APCODE_INSTALL_DIR:-$HOME/.apcode/bin}"
 
 MUTED='\033[0;2m'
@@ -25,8 +25,8 @@ Options:
         --dir <path>        Install directory (default: \$HOME/.apcode/bin)
 
 Examples:
-    curl -fsSL https://raw.githubusercontent.com/apcode/apcode/main/install.sh | bash
-    curl -fsSL https://raw.githubusercontent.com/apcode/apcode/main/install.sh | bash -s -- --version 0.1.0
+    curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash
+    curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash -s -- --version 0.1.0
     ./install.sh --binary ./apcode
     ./install.sh --dir /usr/local/bin
 EOF

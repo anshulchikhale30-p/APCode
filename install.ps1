@@ -1,6 +1,6 @@
 # APCode Installer for Windows PowerShell
 # Usage:
-#   irm https://raw.githubusercontent.com/apcode/apcode/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1 | iex
 #   .\install.ps1 -Version 0.1.0 -InstallDir "C:\apcode"
 #   .\install.ps1 -Binary ".\apcode.exe"
 
@@ -13,7 +13,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$REPO = "apcode/apcode"
+$REPO = "anshulchikhale30-p/APCode"
 
 function Show-Help {
     Write-Host @"
@@ -29,7 +29,7 @@ Options:
     -Help                Display this help message
 
 Examples:
-    irm https://raw.githubusercontent.com/apcode/apcode/main/install.ps1 | iex
+    irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1 | iex
     .\install.ps1 -Version 0.1.0
     .\install.ps1 -Binary .\apcode.exe
     .\install.ps1 -InstallDir "C:\tools\apcode"

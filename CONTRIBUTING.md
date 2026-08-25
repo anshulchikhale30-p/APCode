@@ -3,8 +3,8 @@
 ## Development Setup
 
 ```sh
-git clone https://github.com/apcode/apcode
-cd apcode
+git clone https://github.com/anshulchikhale30-p/APCode
+cd APCode
 go version  # requires 1.26+
 make build
 ./apcode --help
@@ -38,19 +38,19 @@ C:\Temp\apcode-test\apcode.exe --version
 
 ## Releasing
 
-Tag and push triggers GoReleaser:
+Tag and push triggers GoReleaser (GitHub Actions `release.yml` → `goreleaser release --clean` → GitHub Release with binaries + checksums):
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
-# GitHub Actions runs .github/workflows/release.yml -> GoReleaser -> GitHub Release + Homebrew tap
+git tag v0.1.1
+git push origin v0.1.1
+# Pushing v0.1.1 triggers .github/workflows/release.yml -> GoReleaser -> GitHub Release
 ```
 
-Update `npm/package.json` version to match and publish:
+Update `npm/package.json` version to match and publish (future, not required for first release):
 
 ```sh
 cd npm
-npm version 0.2.0
+npm version 0.1.1
 npm publish --access public
 ```
 

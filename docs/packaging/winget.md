@@ -4,7 +4,7 @@ This guide explains how to prepare, test, and submit APCode to the [Microsoft Wi
 
 ## 1. Prerequisites
 
-- A real GitHub release `v0.1.0` at `https://github.com/apcode/apcode/releases/tag/v0.1.0` with assets:
+- A real GitHub release `v0.1.0` at `https://github.com/anshulchikhale30-p/APCode/releases/tag/v0.1.0` with assets:
   - `apcode_0.1.0_windows_amd64.zip`
   - `apcode_0.1.0_windows_arm64.zip` (now built via GoReleaser)
   - `checksums.txt` (SHA256)
@@ -18,7 +18,7 @@ We use:
 - **PackageIdentifier:** `APCode.APCode` (Publisher `APCode`, Package `APCode`)
 - **Publisher:** `APCode`
 - **PackageName:** `APCode`
-- Alternatives considered: `apcode.apcode` (lowercase) — WinGet is case-insensitive, but `APCode.APCode` matches the repo `apcode/apcode` and the Go `AppName`.
+- Alternatives considered: `apcode.apcode` (lowercase) — WinGet is case-insensitive, but `APCode.APCode` matches the repo `anshulchikhale30-p/APCode` and the Go `AppName`.
 
 If you fork or change the GitHub org, update `PackageIdentifier` accordingly (e.g., `YourOrg.APCode`).
 
@@ -42,22 +42,22 @@ After a real release, download each zip and compute SHA256:
 ### PowerShell (Windows)
 
 ```powershell
-Invoke-WebRequest -Uri https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip -OutFile apcode_0.1.0_windows_amd64.zip
+Invoke-WebRequest -Uri https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip -OutFile apcode_0.1.0_windows_amd64.zip
 Get-FileHash apcode_0.1.0_windows_amd64.zip -Algorithm SHA256
 # Same for arm64
-Invoke-WebRequest -Uri https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_arm64.zip -OutFile apcode_0.1.0_windows_arm64.zip
+Invoke-WebRequest -Uri https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/apcode_0.1.0_windows_arm64.zip -OutFile apcode_0.1.0_windows_arm64.zip
 Get-FileHash apcode_0.1.0_windows_arm64.zip -Algorithm SHA256
 # Also verify against checksums.txt
-Invoke-WebRequest -Uri https://github.com/apcode/apcode/releases/download/v0.1.0/checksums.txt -OutFile checksums.txt
+Invoke-WebRequest -Uri https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/checksums.txt -OutFile checksums.txt
 Get-Content checksums.txt | Select-String "windows"
 ```
 
 ### Bash (Linux/macOS)
 
 ```sh
-curl -LO https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip
+curl -LO https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip
 sha256sum apcode_0.1.0_windows_amd64.zip
-curl -LO https://github.com/apcode/apcode/releases/download/v0.1.0/checksums.txt
+curl -LO https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/checksums.txt
 grep windows_amd64 checksums.txt
 ```
 
@@ -104,7 +104,7 @@ For `zip` + `portable` installers, WinGet extracts `apcode.exe` and creates a sh
 If using `wingetcreate`:
 
 ```powershell
-wingetcreate update APCode.APCode --version 0.1.0 --urls https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip https://github.com/apcode/apcode/releases/download/v0.1.0/apcode_0.1.0_windows_arm64.zip --manifest-dir manifests
+wingetcreate update APCode.APCode --version 0.1.0 --urls https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/apcode_0.1.0_windows_amd64.zip https://github.com/anshulchikhale30-p/APCode/releases/download/v0.1.0/apcode_0.1.0_windows_arm64.zip --manifest-dir manifests
 ```
 
 But verify the generated manifest still uses `portable` + `NestedInstallerFiles`.
