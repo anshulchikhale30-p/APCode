@@ -1,6 +1,6 @@
 # APCode
 
-**Offline-first AI coding agent for the terminal — like OpenCode, but everything runs on your laptop.**
+**Offline-first AI coding agent for the terminal — everything runs on your laptop.**
 
 > We care about your system. 😄  
 > So you can focus on your ideas. 💡  
@@ -14,7 +14,7 @@ APCode is an open source AI coding agent you install in your terminal. It unders
 
 ## Install
 
-The easiest way to install APCode is through the install script — just like `opencode`.
+The easiest way to install APCode is through the install script — just like `apcode`.
 
 ### Quick install (recommended)
 
@@ -94,7 +94,7 @@ go install ./cmd/apcode
 # export PATH="$(go env GOPATH)/bin:$PATH"
 ```
 
-**Using npm (like `opencode-ai`) — not yet published:**
+**Using npm (like `apcode-ai`) — not yet published:**
 
 > `apcode-ai` is prepared in `npm/` but has **not** been published to the npm registry. After `npm publish` in `npm/`, users will be able to:
 
@@ -265,11 +265,11 @@ internal/
 models/            reserved for local model artifacts
 tests/             cross-package tests
 docs/              design notes and roadmap
-install.sh         bash installer (like opencode)
+install.sh         bash installer (like apcode)
 install.ps1        PowerShell installer (Windows)
 Makefile           build, test, cross-compile
 .goreleaser.yaml   release config (binaries, archives, brew tap)
-npm/               npm wrapper (apcode-ai) like opencode-ai
+npm/               npm wrapper (apcode-ai) like apcode-ai
 homebrew/          Homebrew formula template
 scoop/             Scoop manifest template
 .github/workflows/ CI + release + install-test
