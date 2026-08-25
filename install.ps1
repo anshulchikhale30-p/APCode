@@ -210,10 +210,10 @@ if ([string]::IsNullOrWhiteSpace($specificVersion)) {
                     if ($hash -eq $expected) {
                         Write-Host "Checksum verified ($archiveName)" -ForegroundColor Green
                     } else {
-                        Write-Host "Checksum mismatch for $archiveName — continuing (HTTPS is still secure)" -ForegroundColor DarkYellow
+                        Write-Host "Checksum mismatch for $archiveName - continuing (HTTPS is still secure)" -ForegroundColor DarkYellow
                     }
                 } else {
-                    Write-Host "Checksum entry not found for $archiveName — continuing" -ForegroundColor DarkYellow
+                    Write-Host "Checksum entry not found for $archiveName - continuing" -ForegroundColor DarkYellow
                 }
             }
         } catch { $null = $_ }
