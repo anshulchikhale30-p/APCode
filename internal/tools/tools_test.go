@@ -45,6 +45,8 @@ func TestToolInterfaceAndSchemas(t *testing.T) {
 		NewSearchFilesTool(ws),
 		NewRunCommandTool(ws),
 		NewGitDiffTool(ws),
+		NewGitStatusTool(ws),
+		NewGitLogTool(ws),
 	}
 	names := make(map[string]bool)
 	for _, tl := range tools {
@@ -71,8 +73,8 @@ func TestToolInterfaceAndSchemas(t *testing.T) {
 			t.Errorf("normalize empty for %q", tl.Name())
 		}
 	}
-	// Expect 7 distinct names matching spec (case-insensitive)
-	expected := []string{"ReadFile", "WriteFile", "EditFile", "ListDirectory", "SearchFiles", "RunCommand", "GitDiff"}
+	// Expect 9 distinct names matching spec (case-insensitive) — includes GitStatus, GitLog
+	expected := []string{"ReadFile", "WriteFile", "EditFile", "ListDirectory", "SearchFiles", "RunCommand", "GitDiff", "GitStatus", "GitLog"}
 	for _, exp := range expected {
 		if !names[exp] {
 			// Also check normalized
@@ -105,14 +107,16 @@ func TestRegistryAndDefault(t *testing.T) {
 		NewSearchFilesTool(ws),
 		NewRunCommandTool(ws),
 		NewGitDiffTool(ws),
+		NewGitStatusTool(ws),
+		NewGitLogTool(ws),
 	}
 	for _, tl := range tools {
 		if err := r.Register(tl); err != nil {
 			t.Fatalf("register %q: %v", tl.Name(), err)
 		}
 	}
-	if r.Count() != 7 {
-		t.Errorf("count = %d, want 7", r.Count())
+	if r.Count() != 9 {
+		t.Errorf("count = %d, want 9", r.Count())
 	}
 	// Get case-insensitive
 	if _, ok := r.Get("readfile"); !ok {
@@ -137,16 +141,16 @@ func TestRegistryAndDefault(t *testing.T) {
 	}
 	// DefaultRegistry
 	dr := DefaultRegistry()
-	if dr.Count() != 7 {
-		t.Errorf("DefaultRegistry count = %d, want 7", dr.Count())
+	if dr.Count() != 9 {
+		t.Errorf("DefaultRegistry count = %d, want 9", dr.Count())
 	}
 	// DefaultRegistryWithWorkspace
 	dr2, err := DefaultRegistryWithWorkspace(ws)
 	if err != nil {
 		t.Fatalf("DefaultRegistryWithWorkspace: %v", err)
 	}
-	if dr2.Count() != 7 {
-		t.Errorf("DefaultRegistryWithWorkspace count = %d, want 7", dr2.Count())
+	if dr2.Count() != 9 {
+		t.Errorf("DefaultRegistryWithWorkspace count = %d, want 9", dr2.Count())
 	}
 	// DefinitionsForPrompt non-empty
 	if s := dr.DefinitionsForPrompt(); !strings.Contains(s, "Available tools") {
@@ -193,29 +197,53 @@ func TestReadFilePathTraversal(t *testing.T) {
 	ws := tempWorkspace(t)
 	writeFile(t, ws, "a.txt", "a")
 	tool := NewReadFileTool(ws)
-	// Try traversal
-	_, err := tool.Execute(context.Background(), Input{"path": "../a.txt"})
+	// Try traversal with native separator (platform-independent)
+	nativeTraversal := filepath.Join("..", "a.txt")
+	_, err := tool.Execute(context.Background(), Input{"path": nativeTraversal})
 	if err == nil {
-		t.Fatal("expected path traversal error")
+		t.Fatalf("expected path traversal error for %q", nativeTraversal)
 	}
 	var te *ToolError
 	if !errors.As(err, &te) || te.Code != CodePathTraversal {
-		t.Errorf("expected PATH_TRAVERSAL, got %v", err)
+		t.Errorf("expected PATH_TRAVERSAL for %q, got %v", nativeTraversal, err)
 	}
 	// Absolute outside
 	_, err = tool.Execute(context.Background(), Input{"path": "/etc/passwd"})
 	// On Windows, /etc/passwd may be C:\etc\passwd which might be outside workspace; should be blocked
+	// But on Windows, "/etc/passwd" is not absolute (no volume) and may resolve inside workspace via Join, so be lenient.
 	if err == nil {
-		// Could be outside check; if workspace is temp dir, /etc/passwd is outside
-		// On Windows, /etc/passwd resolves to C:\etc\passwd, which is different volume? Might be C: same volume but outside.
-		// We expect traversal/outside error.
-		// If err is nil but Result.Err is set, also check
-		t.Logf("warning: absolute outside not blocked as transport error, check Result")
+		t.Logf("warning: absolute outside not blocked as transport error, check Result (platform-dependent)")
+	} else if !errors.As(err, &te) || (te.Code != CodePathTraversal && te.Code != CodeOutsideWorkspace) {
+		t.Errorf("expected PATH_TRAVERSAL or OUTSIDE_WORKSPACE for /etc/passwd, got %v", err)
 	}
-	// Also test with "..\\"
-	_, err = tool.Execute(context.Background(), Input{"path": "..\\secret.txt"})
+	// Native parent traversal via Join (covers both Windows and Unix)
+	nativeSecret := filepath.Join("..", "secret.txt")
+	_, err = tool.Execute(context.Background(), Input{"path": nativeSecret})
 	if err == nil {
-		t.Fatal("expected traversal for ..\\")
+		t.Fatalf("expected traversal for %q", nativeSecret)
+	}
+	if !errors.As(err, &te) || te.Code != CodePathTraversal {
+		t.Errorf("expected PATH_TRAVERSAL for %q, got %v", nativeSecret, err)
+	}
+	// Ensure Windows-style cannot bypass on Unix and vice versa (hardened validation)
+	for _, winPath := range []string{"..\\secret.txt", "..\\..\\secret.txt"} {
+		_, err = tool.Execute(context.Background(), Input{"path": winPath})
+		if err == nil {
+			t.Fatalf("expected traversal for Windows-style %q", winPath)
+		}
+		if !errors.As(err, &te) || te.Code != CodePathTraversal {
+			t.Errorf("expected PATH_TRAVERSAL for Windows-style %q, got %v", winPath, err)
+		}
+	}
+	// Also ensure Unix-style traversal is blocked on all platforms
+	for _, unixPath := range []string{"../secret.txt", "../../secret.txt"} {
+		_, err = tool.Execute(context.Background(), Input{"path": unixPath})
+		if err == nil {
+			t.Fatalf("expected traversal for Unix-style %q", unixPath)
+		}
+		if !errors.As(err, &te) || te.Code != CodePathTraversal {
+			t.Errorf("expected PATH_TRAVERSAL for Unix-style %q, got %v", unixPath, err)
+		}
 	}
 	_ = te
 }

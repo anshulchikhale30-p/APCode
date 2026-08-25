@@ -330,16 +330,19 @@ func (m *Manager) ListAll() []*model.ModelMetadata {
 	defer m.mu.RUnlock()
 
 	models := m.registry.List()
+	result := make([]*model.ModelMetadata, 0, len(models))
 	for _, metadata := range models {
+		cpy := *metadata // copy to avoid mutating shared registry state
 		if state, ok := m.installStates[metadata.ID]; ok && state.Installed {
-			metadata.Installed = true
-			metadata.InstallPath = state.InstallPath
+			cpy.Installed = true
+			cpy.InstallPath = state.InstallPath
 		} else {
-			metadata.Installed = false
-			metadata.InstallPath = ""
+			cpy.Installed = false
+			cpy.InstallPath = ""
 		}
+		result = append(result, &cpy)
 	}
-	return models
+	return result
 }
 
 // GetModelInfo returns detailed information about a model.

@@ -292,6 +292,8 @@ func DefaultRegistry() *Registry {
 	_ = r.Register(NewSearchFilesTool())
 	_ = r.Register(NewRunCommandTool())
 	_ = r.Register(NewGitDiffTool())
+	_ = r.Register(NewGitStatusTool())
+	_ = r.Register(NewGitLogTool())
 	// Aliases for backward compatibility (snake_case without workspace)
 	// The primary tools already cover normalized lookup, so extra aliases not needed,
 	// but we keep ListFiles alias as "list_files" is historically used.
@@ -313,6 +315,8 @@ func DefaultRegistryWithWorkspace(workspace string) (*Registry, error) {
 	_ = r.Register(NewSearchFilesTool(ws))
 	_ = r.Register(NewRunCommandTool(ws))
 	_ = r.Register(NewGitDiffTool(ws))
+	_ = r.Register(NewGitStatusTool(ws))
+	_ = r.Register(NewGitLogTool(ws))
 	return r, nil
 }
 
@@ -419,8 +423,30 @@ func validatePath(workspace, p string) (string, error) {
 	if filepath.IsAbs(rel) {
 		return "", NewToolError(CodePathTraversal, fmt.Sprintf("path %q escapes workspace", p), nil)
 	}
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || strings.HasPrefix(rel, "../") || strings.HasPrefix(rel, "..\\") {
 		return "", NewToolError(CodePathTraversal, fmt.Sprintf("path %q escapes workspace %q", p, ws), nil)
+	}
+	// Also reject Windows-style traversal explicitly on Unix (e.g. "..\\secret.txt" on Linux)
+	// to prevent bypass when an attacker sends Windows separators to a Unix server.
+	if strings.Contains(p, "..\\") || strings.Contains(p, "../") {
+		// If p contains parent traversal with either separator and rel escapes, already handled.
+		// This extra check ensures that a path like "..\\secret.txt" is treated as traversal
+		// even when filepath.Clean on Unix does not split on backslash.
+		// We verify by checking if cleaned path would escape if backslashes were separators.
+		normalized := strings.ReplaceAll(p, "\\", "/")
+		normCleaned := filepath.Clean(normalized)
+		var normAbs string
+		if filepath.IsAbs(normCleaned) {
+			normAbs = filepath.Clean(normCleaned)
+		} else {
+			normAbs = filepath.Join(ws, normCleaned)
+			normAbs = filepath.Clean(normAbs)
+		}
+		if normRel, err := filepath.Rel(ws, normAbs); err == nil {
+			if normRel == ".." || strings.HasPrefix(normRel, "../") || strings.HasPrefix(normRel, "..\\") {
+				return "", NewToolError(CodePathTraversal, fmt.Sprintf("path %q escapes workspace %q", p, ws), nil)
+			}
+		}
 	}
 	// Also block traversal that still contains ".." after clean? Clean already removed, but check original for suspicious.
 	if strings.Contains(p, "..") {

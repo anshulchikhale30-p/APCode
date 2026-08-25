@@ -324,6 +324,7 @@ func (t *RunCommandTool) InputSchema() Schema {
 			"args":    {Type: "string", Description: "Space-separated arguments (optional)"},
 			"dir":     {Type: "string", Description: "Relative working directory within workspace (optional, defaults to workspace root)"},
 			"timeout": {Type: "string", Description: "Timeout duration like 5s, 1m (optional, default 30s)"},
+			"confirm": {Type: "string", Description: "Set to 'true' to confirm destructive commands (rm -rf, git reset --hard, etc.)"},
 		},
 		Required: []string{"command"},
 	}
@@ -336,6 +337,10 @@ func (t *RunCommandTool) Execute(ctx context.Context, in Input) (Result, error) 
 	cmdStr := strings.TrimSpace(in["command"])
 	if cmdStr == "" {
 		return Result{}, NewToolError(CodeInvalidInput, "RunCommand: missing required argument 'command'", nil)
+	}
+	// Safety: destructive commands require explicit confirmation
+	if err := checkDestructiveCommand(cmdStr, in["args"], in["confirm"]); err != nil {
+		return Result{}, err
 	}
 	// Parse command: if command contains spaces and no args provided, split.
 	command := cmdStr
@@ -509,6 +514,39 @@ func splitArgs(s string) []string {
 		args = append(args, cur.String())
 	}
 	return args
+}
+
+// checkDestructiveCommand rejects dangerous operations without explicit confirmation.
+func checkDestructiveCommand(command, argsStr, confirm string) error {
+	lowerCmd := strings.ToLower(strings.TrimSpace(command))
+	lowerArgs := strings.ToLower(strings.TrimSpace(argsStr))
+	combined := lowerCmd + " " + lowerArgs
+	// Normalize confirm flag
+	confirmed := strings.ToLower(strings.TrimSpace(confirm)) == "true" || strings.ToLower(strings.TrimSpace(confirm)) == "1" || strings.ToLower(strings.TrimSpace(confirm)) == "yes"
+	if confirmed {
+		return nil
+	}
+	destructive := []string{
+		"rm -rf",
+		"rm -r",
+		"git reset --hard",
+		"git clean",
+		"git push --force",
+		"git push -f",
+		"force push",
+		"mkfs",
+		"format c:",
+		"del /f",
+		"rmdir /s",
+	}
+	for _, pat := range destructive {
+		if strings.Contains(combined, pat) {
+			return NewToolError(CodePermission, fmt.Sprintf("destructive command %q requires confirmation: add confirm=true to input", combined), nil)
+		}
+	}
+	// Also check for secrets in args (never expose, but reject if trying to cat .env with secrets?)
+	// We don't block cat, but we ensure output truncation; secrets not leaked via tool error messages.
+	return nil
 }
 
 // isWindows helper
