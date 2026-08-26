@@ -32,11 +32,17 @@ type NativeConfig struct {
 	GenerateFunc func(ctx context.Context, req GenerateRequest) (*GenerateResponse, error)
 }
 
-// NativeRuntime is the first real local inference backend for APCode.
-// It is lightweight, offline-first, and does not bundle models or
-// contact any cloud API. It validates that model files exist locally
-// before loading and performs deterministic generation for tests
-// and lightweight local use.
+// NativeRuntime is a deterministic STUB backend, not a neural network.
+//
+// IMPORTANT: this runtime does NOT parse model weights, does NOT tokenize,
+// and does NOT perform any forward pass. Load() only verifies that a model
+// file exists locally; Generate()/Stream() return deterministic, clearly
+// labelled placeholder text so that APCode's plumbing can be exercised
+// offline and in tests.
+//
+// For GENUINE local model inference use the Ollama runtime (real daemon,
+// real weights) or a llama.cpp-backed runtime. Detection prefers those
+// backends whenever they are available.
 type NativeRuntime struct {
 	mu sync.Mutex
 
@@ -244,7 +250,6 @@ func (r *NativeRuntime) Generate(ctx context.Context, req GenerateRequest) (*Gen
 	r.state = StateGenerating
 	cancelCh := make(chan struct{})
 	r.cancelCh = cancelCh
-	loadedID := r.loaded.ID
 	r.mu.Unlock()
 
 	defer func() {
@@ -273,29 +278,12 @@ func (r *NativeRuntime) Generate(ctx context.Context, req GenerateRequest) (*Gen
 	case <-time.After(delay):
 	}
 
-	// Local deterministic generation - offline, no cloud.
-	// Simple rule-based inference for APCode test tasks - still uses local model file.
-	lowerPrompt := strings.ToLower(req.Prompt)
-	text := ""
-	switch {
-	case strings.Contains(lowerPrompt, "tool_result") && (strings.Contains(lowerPrompt, "fix the bug") || strings.Contains(lowerPrompt, "fix bug")):
-		text = "Bug fixed successfully. The loop in main.go now correctly uses `for i := 0; i < 10; i++` to iterate 10 times (0 to 9) instead of 11."
-	case strings.Contains(lowerPrompt, "fix the bug") || strings.Contains(lowerPrompt, "fix bug"):
-		// Generate a tool call to fix the off-by-one bug in main.go
-		// Use write_file tool with the corrected content
-		text = `{"tool":"write_file","input":{"path":"main.go","content":"package main\n\nimport \"fmt\"\n\nfunc main() {\n    for i := 0; i < 10; i++ {\n        fmt.Println(i)\n    }\n    fmt.Println(\"Hello, world!\")\n}\n\nfunc add(a, b int) int {\n    return a + b\n}\n"}}`
-	case strings.Contains(lowerPrompt, "find the bug") || strings.Contains(lowerPrompt, "find bug") || strings.Contains(lowerPrompt, "bug in main"):
-		text = "I found the bug in main.go line 5: `for i := 0; i <= 10; i++` iterates 11 times (0 to 10). It should be `for i := 0; i < 10; i++` to iterate 10 times (0 to 9). The loop condition `i <= 10` is off-by-one."
-	case strings.Contains(lowerPrompt, "explain") && strings.Contains(lowerPrompt, "main.go"):
-		text = "This is a Go project containing main.go. It has a main function that loops from 0 to 10 (inclusive, 11 iterations) printing each number, then prints \"Hello, world!\", and an add function that returns the sum of two integers. The project also has go.mod defining module test."
-	case strings.Contains(lowerPrompt, "explain this project") || strings.Contains(lowerPrompt, "explain project"):
-		text = "This is a Go project with main.go (main package, main function with a loop and Hello world, plus add helper) and go.mod. It is a simple CLI example with 1 Go file, uses Go 1.21, and is under Git."
-	case strings.Contains(lowerPrompt, "hello"):
-		text = fmt.Sprintf("Hello! I'm APCode, your offline AI coding agent. You said: %s. I can help you understand, search, and modify code. Type /help for commands.", req.Prompt)
-	default:
-		// Fallback deterministic echo with model ID to prove local model was used
-		text = fmt.Sprintf("native [%s] response for: %s", loadedID, req.Prompt)
-	}
+	// Deterministic stub output â€” clearly labelled so it can never be
+	// mistaken for genuine model generation. No tokens are produced by any
+	// neural network here.
+	text := fmt.Sprintf(
+		"[APCode local stub â€” no model weights executed] You said: %s (this runtime cannot perform real inference; connect Ollama or llama.cpp for genuine generation)",
+		req.Prompt)
 	if req.Options.MaxTokens > 0 {
 		words := strings.Fields(text)
 		if len(words) > req.Options.MaxTokens {
@@ -351,30 +339,14 @@ func (r *NativeRuntime) Stream(ctx context.Context, req GenerateRequest) (<-chan
 	r.state = StateGenerating
 	cancelCh := make(chan struct{})
 	r.cancelCh = cancelCh
-	loadedID := r.loaded.ID
 	r.mu.Unlock()
 
 	tokens := r.cfg.StreamTokens
 	if len(tokens) == 0 {
-		lowerPrompt := strings.ToLower(req.Prompt)
-		text := ""
-		switch {
-		case strings.Contains(lowerPrompt, "tool_result") && (strings.Contains(lowerPrompt, "fix the bug") || strings.Contains(lowerPrompt, "fix bug")):
-			text = "Bug fixed successfully. The loop in main.go now correctly uses `for i := 0; i < 10; i++` to iterate 10 times (0 to 9) instead of 11."
-		case strings.Contains(lowerPrompt, "fix the bug") || strings.Contains(lowerPrompt, "fix bug"):
-			text = `{"tool":"write_file","input":{"path":"main.go","content":"package main\n\nimport \"fmt\"\n\nfunc main() {\n    for i := 0; i < 10; i++ {\n        fmt.Println(i)\n    }\n    fmt.Println(\"Hello, world!\")\n}\n\nfunc add(a, b int) int {\n    return a + b\n}\n"}}`
-		case strings.Contains(lowerPrompt, "find the bug") || strings.Contains(lowerPrompt, "find bug") || strings.Contains(lowerPrompt, "bug in main"):
-			text = "I found the bug in main.go line 5: `for i := 0; i <= 10; i++` iterates 11 times (0 to 10). It should be `for i := 0; i < 10; i++` to iterate 10 times (0 to 9)."
-		case strings.Contains(lowerPrompt, "explain") && strings.Contains(lowerPrompt, "main.go"):
-			text = "This is a Go project containing main.go. It has a main function that loops from 0 to 10 (inclusive, 11 iterations) printing each number, then prints \"Hello, world!\", and an add function that returns the sum of two integers."
-		case strings.Contains(lowerPrompt, "explain this project") || strings.Contains(lowerPrompt, "explain project"):
-			text = "This is a Go project with main.go (main package, main function with a loop and Hello world, plus add helper) and go.mod. It is a simple CLI example with 1 Go file, uses Go 1.21, and is under Git."
-		case strings.Contains(lowerPrompt, "hello"):
-			// Include original prompt to satisfy tests that check for prompt echo, plus greeting
-			text = fmt.Sprintf("Hello! I'm APCode, your offline AI coding agent. You said: %s. I can help you understand, search, and modify code. Type /help for commands.", req.Prompt)
-		default:
-			text = fmt.Sprintf("native [%s] response for: %s", loadedID, req.Prompt)
-		}
+		// Deterministic stub stream â€” same honest labelling as Generate.
+		text := fmt.Sprintf(
+			"[APCode local stub â€” no model weights executed] You said: %s (this runtime cannot perform real inference; connect Ollama or llama.cpp for genuine generation)",
+			req.Prompt)
 		words := strings.Fields(text)
 		tokens = make([]string, len(words))
 		for i, w := range words {
@@ -493,12 +465,12 @@ func (r *NativeRuntime) Status(ctx context.Context) (RuntimeStatus, error) {
 	if r.loaded != nil {
 		st.ModelID = r.loaded.ID
 		st.ModelPath = r.loaded.InstallPath
-		st.Message = "native model " + r.loaded.ID + " ready"
+		st.Message = "native stub: model file " + r.loaded.ID + " present (no real inference is performed)"
 	} else if !r.available {
 		st.State = StateError
 		st.Message = "native runtime not available"
 	} else {
-		st.Message = "native runtime idle - ready for local inference"
+		st.Message = "native stub idle (deterministic placeholder backend — no real inference)"
 	}
 	return st, nil
 }

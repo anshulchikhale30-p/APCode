@@ -305,10 +305,16 @@ func TestProbeAvailableRuntimes(t *testing.T) {
 func TestDetectRuntime(t *testing.T) {
 	rt := DetectRuntime()
 	if rt == nil {
-		t.Fatal("DetectRuntime should return native when available")
+		t.Fatal("DetectRuntime should return the stub when nothing else exists")
 	}
-	if rt.Type() != RuntimeTypeNative {
-		t.Errorf("expected native as preferred, got %q", rt.Type())
+	// Genuine backends are preferred over the native stub: DetectRuntime
+	// must agree with ProbeAvailableRuntimes' first entry.
+	probe := ProbeAvailableRuntimes()
+	if len(probe) == 0 {
+		t.Fatalf("no runtimes available")
+	}
+	if rt.Type() != probe[0].Type() {
+		t.Errorf("DetectRuntime=%q but preference order head is %q", rt.Type(), probe[0].Type())
 	}
 }
 

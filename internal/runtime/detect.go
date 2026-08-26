@@ -52,11 +52,14 @@ func InstalledSupportedModels(rt InferenceRuntime, models []*model.ModelMetadata
 }
 
 // ProbeAvailableRuntimes checks all registered runtimes (excluding mock) and
-// returns those that are currently Available. It uses background context.
+// returns those that are currently Available, in genuine-inference-first
+// preference order. The native stub comes last because it cannot perform
+// real model execution.
 func ProbeAvailableRuntimes() []InferenceRuntime {
 	ctx := context.Background()
+	preference := []RuntimeType{RuntimeTypeLlamaCpp, RuntimeTypeOllama, RuntimeTypeNative}
 	var out []InferenceRuntime
-	for _, t := range RegisteredTypes() {
+	for _, t := range preference {
 		if t == RuntimeTypeMock {
 			continue
 		}
@@ -72,11 +75,10 @@ func ProbeAvailableRuntimes() []InferenceRuntime {
 }
 
 // DetectRuntime attempts to find a usable runtime.
-// It prefers Native, then LlamaCpp, then Ollama.
+// It prefers genuine backends (llama.cpp, Ollama) over the native stub.
 // Returns nil if none available.
 func DetectRuntime() InferenceRuntime {
-	// Preference order: native (lightweight embedded), llama.cpp, ollama
-	order := []RuntimeType{RuntimeTypeNative, RuntimeTypeLlamaCpp, RuntimeTypeOllama}
+	order := []RuntimeType{RuntimeTypeLlamaCpp, RuntimeTypeOllama, RuntimeTypeNative}
 	ctx := context.Background()
 	for _, t := range order {
 		rt, err := Create(t, nil)

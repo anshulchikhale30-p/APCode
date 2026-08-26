@@ -613,7 +613,8 @@ func TestLlamaCppAdapter(t *testing.T) {
 
 func TestOllamaAdapter(t *testing.T) {
 	ctx := context.Background()
-	rt := NewOllamaRuntime(OllamaConfig{Available: true})
+	// Unreachable endpoint: Load must fail honestly.
+	rt := NewOllamaRuntime(OllamaConfig{Endpoint: "http://127.0.0.1:1"})
 	if rt.Type() != RuntimeTypeOllama {
 		t.Errorf("type should be ollama, got %q", rt.Type())
 	}
@@ -625,19 +626,21 @@ func TestOllamaAdapter(t *testing.T) {
 	if rt.IsCompatible(otherModel) {
 		t.Error("should not be compatible with llama-only")
 	}
-	if err := rt.Load(ctx, ollamaModel); err != nil {
-		t.Fatalf("load failed: %v", err)
+	if err := rt.Load(ctx, ollamaModel); err == nil {
+		t.Fatal("load must fail when daemon unreachable")
 	}
 	_, err := rt.Generate(ctx, GenerateRequest{Prompt: "hi"})
 	var re *RuntimeError
-	if !errors.As(err, &re) || re.Code != CodeNotImplemented {
-		t.Errorf("expected not_implemented, got %v", err)
+	if !errors.As(err, &re) || re.Code != CodeNotLoaded {
+		t.Errorf("expected not_loaded without a loaded model, got %v", err)
 	}
 	st, _ := rt.Status(ctx)
 	if st.Type != RuntimeTypeOllama {
 		t.Errorf("status type should be ollama, got %q", st.Type)
 	}
-	_ = rt.Unload(ctx)
+	if st.Available {
+		t.Error("status should report unavailable when daemon is unreachable")
+	}
 }
 
 func TestRegistry(t *testing.T) {

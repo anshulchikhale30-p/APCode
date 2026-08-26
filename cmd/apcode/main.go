@@ -829,18 +829,10 @@ func runRuntime(args []string) {
 	var rtName string
 	availableRuntimes := runtime.ProbeAvailableRuntimes()
 	if len(availableRuntimes) > 0 {
-		// Prefer native
-		for _, r := range availableRuntimes {
-			if r.Type() == runtime.RuntimeTypeNative {
-				rt = r
-				rtName = r.Name()
-				break
-			}
-		}
-		if rt == nil {
-			rt = availableRuntimes[0]
-			rtName = rt.Name()
-		}
+		// Prefer genuine inference backends; ProbeAvailableRuntimes already
+		// returns them in preference order (llama.cpp, ollama, native stub).
+		rt = availableRuntimes[0]
+		rtName = rt.Name()
 	}
 	// Also check llama.cpp with explicit Available false case: DetectRuntime helper
 	if rt == nil {
@@ -905,7 +897,19 @@ func runRuntime(args []string) {
 		fmt.Fprintln(os.Stdout)
 		for _, m := range installedModels {
 			if rt == nil || rt.IsCompatible(m) {
-				fmt.Fprintf(os.Stdout, "  %s %s (%s)\n", tui.Muted("-"), m.ID, m.Name)
+				note := ""
+				// For daemon-managed backends, a local GGUF stub is not
+				// enough — the daemon must hold the model itself.
+				if prober, ok := rt.(interface {
+					HasModel(ctx context.Context, id string) bool
+				}); ok {
+					bctx, bcancel := context.WithTimeout(context.Background(), 3*time.Second)
+					if !prober.HasModel(bctx, m.ID) {
+						note = tui.Warning(" [not pulled into ollama]")
+					}
+					bcancel()
+				}
+				fmt.Fprintf(os.Stdout, "  %s %s (%s)%s\n", tui.Muted("-"), m.ID, m.Name, note)
 			}
 		}
 	} else {
@@ -1127,7 +1131,14 @@ func runInfer(args []string) {
 		fmt.Fprintln(os.Stdout, tui.Primary("Response:"))
 		fmt.Fprintln(os.Stdout, resp.Text)
 		fmt.Fprintln(os.Stdout)
-		fmt.Fprintf(os.Stdout, "%s %d tokens, %s, finish: %s\n", tui.Muted("Stats:"), resp.TokensGenerated, resp.Duration.Round(time.Millisecond), resp.FinishReason)
+		stats := fmt.Sprintf("%d tokens, %s, finish: %s", resp.TokensGenerated, resp.Duration.Round(time.Millisecond), resp.FinishReason)
+		if resp.TokensGenerated > 0 && resp.Duration > 0 {
+			stats += fmt.Sprintf(", %.1f tok/s", float64(resp.TokensGenerated)/resp.Duration.Seconds())
+		}
+		if resp.PromptTokens > 0 {
+			stats += fmt.Sprintf(" (prompt: %d tokens)", resp.PromptTokens)
+		}
+		fmt.Fprintf(os.Stdout, "%s %s\n", tui.Muted("Stats:"), stats)
 	}
 }
 

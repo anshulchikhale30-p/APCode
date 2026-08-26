@@ -80,6 +80,9 @@ type GenerateResponse struct {
 	Text string `json:"text"`
 	// TokensGenerated is the number of tokens produced.
 	TokensGenerated int `json:"tokens_generated"`
+	// PromptTokens is the number of prompt tokens evaluated, when the
+	// backend reports it (0 = unknown).
+	PromptTokens int `json:"prompt_tokens,omitempty"`
 	// FinishReason is "stop", "length", "cancelled", or "error".
 	FinishReason string `json:"finish_reason"`
 	// Duration is the wall time spent generating.

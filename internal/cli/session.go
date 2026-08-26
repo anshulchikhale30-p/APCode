@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"context"
+	"time"
+
 	"apcode/internal/config"
 	"apcode/internal/localmodel"
 	"apcode/internal/model"
@@ -34,16 +37,18 @@ func ResolveSession() *Session {
 func ResolveSessionWithDir(modelDir string) *Session {
 	s := &Session{ModelDir: modelDir}
 
-	for _, r := range runtime.ProbeAvailableRuntimes() {
-		if r.Type() == runtime.RuntimeTypeNative {
+	// Prefer genuine inference backends (llama.cpp, Ollama) over the native
+	// stub. ProbeAvailableRuntimes returns them in preference order.
+	available := runtime.ProbeAvailableRuntimes()
+	for _, r := range available {
+		if r.Type() != runtime.RuntimeTypeNative {
 			s.Runtime = r
 			break
 		}
 	}
-	if s.Runtime == nil {
-		if avail := runtime.ProbeAvailableRuntimes(); len(avail) > 0 {
-			s.Runtime = avail[0]
-		}
+	if s.Runtime == nil && len(available) > 0 {
+		// Only the native stub is available; use it but the UI must label it.
+		s.Runtime = available[0]
 	}
 	if s.Runtime == nil {
 		s.Runtime = runtime.DetectRuntime()
@@ -53,18 +58,48 @@ func ResolveSessionWithDir(modelDir string) *Session {
 	}
 	s.RuntimeName = s.Runtime.Name()
 
+	// A model counts as available either when its file exists locally
+	// (localmodel manager) or — for backends that manage their own weights,
+	// like Ollama — when the backend itself confirms it can serve it.
+	type modelProber interface {
+		HasModel(ctx context.Context, id string) bool
+	}
+	prober, _ := s.Runtime.(modelProber)
+
 	registry := model.NewModelRegistry()
 	for _, m := range model.BuiltInCatalog() {
 		_ = registry.Add(m)
 	}
+
+	// Daemon-managed models first (genuine weights served by the backend).
+	if prober != nil {
+		for _, m := range registry.List() {
+			if m.Installed || !s.Runtime.IsCompatible(m) {
+				continue
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			ok := prober.HasModel(ctx, m.ID)
+			cancel()
+			if ok {
+				cp := *m
+				cp.Installed = true
+				cp.InstallPath = "ollama:" + m.ID
+				s.Model = &cp
+				break
+			}
+		}
+	}
+
 	manager, err := localmodel.NewManager(modelDir, registry)
 	if err != nil {
 		return s
 	}
-	for _, m := range manager.ListInstalled() {
-		if s.Runtime.IsCompatible(m) {
-			s.Model = m
-			break
+	if s.Model == nil {
+		for _, m := range manager.ListInstalled() {
+			if s.Runtime.IsCompatible(m) {
+				s.Model = m
+				break
+			}
 		}
 	}
 	return s

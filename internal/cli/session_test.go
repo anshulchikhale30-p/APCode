@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -37,8 +38,12 @@ func TestResolveSessionWithDir(t *testing.T) {
 	if s.ModelDir != dir {
 		t.Errorf("expected model dir %q, got %q", dir, s.ModelDir)
 	}
-	if s.Model != nil {
-		t.Errorf("expected no models in empty dir, got %s", s.Model.ID)
+	// An empty local model directory means no file-backed model. A daemon
+	// that serves a compatible catalog model (e.g. Ollama) may still
+	// legitimately resolve one — in that case its InstallPath records the
+	// daemon origin.
+	if s.Model != nil && !strings.HasPrefix(s.Model.InstallPath, "ollama:") {
+		t.Errorf("unexpected file-backed model in empty dir: %s (%s)", s.Model.ID, s.Model.InstallPath)
 	}
 }
 

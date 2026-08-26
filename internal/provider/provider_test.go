@@ -114,3 +114,28 @@ func TestGenerateStructured(t *testing.T) {
 		t.Errorf("raw = %q", raw)
 	}
 }
+
+// TestProviderNeverReturnsHardcodedAPCodeResponse is the core regression for
+// the "fake inference" bug: whatever runtime backs the provider, its output
+// must be relayed verbatim ? never a templated APCode greeting.
+func TestProviderNeverReturnsHardcodedAPCodeResponse(t *testing.T) {
+	// A genuine backend that echoes a distinctive marker.
+	rt := &mockRuntime{text: "MODEL-SAYS: 2 + 2 equals 4."}
+	p := NewLocalRuntimeProvider(rt, nil, "")
+	resp, err := p.Generate(context.Background(), GenerateRequest{Prompt: "What is 2 + 2?"})
+	if err != nil {
+		t.Fatalf("Generate: %v", err)
+	}
+	for _, banned := range []string{
+		"Hello! I'm APCode",
+		"offline AI coding agent. You said:",
+		"response for:",
+	} {
+		if strings.Contains(resp.Text, banned) {
+			t.Errorf("provider returned hardcoded template %q in %q", banned, resp.Text)
+		}
+	}
+	if !strings.HasPrefix(resp.Text, "MODEL-SAYS:") {
+		t.Errorf("backend response not relayed verbatim: %q", resp.Text)
+	}
+}
