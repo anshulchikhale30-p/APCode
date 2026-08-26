@@ -294,7 +294,7 @@ func TestAgentToolSelectionNotFound(t *testing.T) {
 	}
 	found := false
 	for _, m := range res.History {
-		if strings.Contains(m.Content, "not found") {
+		if strings.Contains(m.Content, "unknown_tool") && strings.Contains(m.Content, "available_tools") {
 			found = true
 			break
 		}

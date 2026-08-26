@@ -73,7 +73,7 @@ func TestToolInterfaceAndSchemas(t *testing.T) {
 			t.Errorf("normalize empty for %q", tl.Name())
 		}
 	}
-	// Expect 9 distinct names matching spec (case-insensitive) — includes GitStatus, GitLog
+	// Expect 9 distinct names matching spec (case-insensitive) â€” includes GitStatus, GitLog
 	expected := []string{"ReadFile", "WriteFile", "EditFile", "ListDirectory", "SearchFiles", "RunCommand", "GitDiff", "GitStatus", "GitLog"}
 	for _, exp := range expected {
 		if !names[exp] {
@@ -160,7 +160,7 @@ func TestRegistryAndDefault(t *testing.T) {
 		}
 	}
 	// DefinitionsForPrompt non-empty
-	if s := dr.DefinitionsForPrompt(); !strings.Contains(s, "Available tools") {
+	if s := dr.DefinitionsForPrompt(); !strings.Contains(s, "AVAILABLE TOOLS") {
 		t.Error("DefinitionsForPrompt missing header")
 	}
 }

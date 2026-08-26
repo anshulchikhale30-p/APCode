@@ -7,6 +7,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -207,6 +208,46 @@ func (r *Registry) MustRegister(t Tool) {
 	}
 }
 
+// ReplaceWithLegacy registers t as the canonical tool under its own name and
+// removes any existing entries that would collide with it — either by
+// normalized name or because they are listed explicitly as legacy names.
+// This lets spec-style snake_case names become the single canonical
+// identifier while retiring older CamelCase spellings.
+func (r *Registry) ReplaceWithLegacy(t Tool, legacy ...string) error {
+	if t == nil {
+		return errors.New("tools: cannot register nil tool")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	norm := normalizeName(t.Name())
+
+	removeKeys := map[string]bool{}
+	for _, legacyName := range legacy {
+		removeKeys[legacyName] = true
+	}
+	for name, existing := range r.tools {
+		if normalizeName(name) == norm || normalizeName(existing.Name()) == norm {
+			removeKeys[name] = true
+		}
+	}
+	for key := range removeKeys {
+		if existing, ok := r.tools[key]; ok {
+			delete(r.tools, key)
+			delete(r.normalized, normalizeName(key))
+			delete(r.normalized, normalizeName(existing.Name()))
+		}
+	}
+	// Re-register through the standard path (lock re-entrancy avoided by
+	// doing the bookkeeping manually).
+	name := strings.TrimSpace(t.Name())
+	if name == "" {
+		return errors.New("tools: tool name cannot be empty")
+	}
+	r.tools[name] = t
+	r.normalized[norm] = t
+	return nil
+}
+
 // Get returns a tool by name, using case/underscore-insensitive lookup.
 func (r *Registry) Get(name string) (Tool, bool) {
 	r.mu.RLock()
@@ -312,6 +353,7 @@ func DefaultRegistry() *Registry {
 	_ = r.Register(NewGitStatusTool())
 	_ = r.Register(NewGitLogTool())
 	registerExtendedTools(r, ".")
+	RegisterSpecTools(r, ".")
 	return r
 }
 
@@ -332,6 +374,7 @@ func DefaultRegistryWithWorkspace(workspace string) (*Registry, error) {
 	_ = r.Register(NewGitStatusTool(ws))
 	_ = r.Register(NewGitLogTool(ws))
 	registerExtendedTools(r, ws)
+	RegisterSpecTools(r, ws)
 	return r, nil
 }
 
@@ -349,14 +392,17 @@ func registerExtendedTools(r *Registry, ws string) {
 	}
 }
 
-// DefinitionsForPrompt returns tool definitions formatted for inclusion in model prompts.
+// DefinitionsForPrompt returns tool definitions formatted for inclusion in
+// model prompts. This is the authoritative catalog: it is generated directly
+// from the registered tools, so the model can only ever see tools that
+// actually exist.
 func (r *Registry) DefinitionsForPrompt() string {
 	tools := r.List()
 	if len(tools) == 0 {
 		return "No tools available."
 	}
 	var b strings.Builder
-	b.WriteString("Available tools:\n")
+	b.WriteString("AVAILABLE TOOLS (these are the ONLY tools that exist — never invent or assume any other tool name):\n")
 	for _, t := range tools {
 		schema := t.InputSchema()
 		props := ""
@@ -377,9 +423,50 @@ func (r *Registry) DefinitionsForPrompt() string {
 		}
 		fmt.Fprintf(&b, "- %s: %s%s\n", t.Name(), t.Description(), props)
 	}
-	b.WriteString("\nTo invoke a tool, respond with JSON: {\"tool\":\"<name>\",\"input\":{...}}\n")
-	b.WriteString("To provide a final answer, respond with the answer text without JSON tool call.\n")
+	b.WriteString("\nTo invoke a tool, respond with exactly one JSON object and nothing else:\n")
+	b.WriteString("{\"tool\":\"<name from the list above>\",\"input\":{...}}\n")
+	b.WriteString("If no tool is needed, respond with plain text only.\n")
 	return b.String()
+}
+
+// Validate checks that name refers to a registered tool and that all
+// required parameters are present in in. It returns a structured ToolError:
+//   - CodeNotFound when the tool does not exist (the model hallucinated it)
+//   - CodeInvalidInput when required parameters are missing
+func (r *Registry) Validate(name string, in Input) error {
+	t, ok := r.Get(name)
+	if !ok {
+		return NewToolError(CodeNotFound, fmt.Sprintf("unknown tool %q", name), ErrToolNotFound)
+	}
+	schema := t.InputSchema()
+	for _, req := range schema.Required {
+		v, present := in[req]
+		if !present || strings.TrimSpace(v) == "" {
+			return NewToolError(CodeInvalidInput,
+				fmt.Sprintf("tool %q requires parameter %q", name, req), nil)
+		}
+	}
+	return nil
+}
+
+// UnknownToolPayload renders the canonical structured error returned to the
+// model when it requests a tool that does not exist. Including the full list
+// of real tool names lets the model recover by picking an actual tool.
+func (r *Registry) UnknownToolPayload(name string) string {
+	payload := struct {
+		Error          string   `json:"error"`
+		Tool           string   `json:"tool"`
+		AvailableTools []string `json:"available_tools"`
+	}{
+		Error:          "unknown_tool",
+		Tool:           name,
+		AvailableTools: r.Names(),
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Sprintf("unknown_tool: %q; available: %v", name, r.Names())
+	}
+	return string(data)
 }
 
 // ---- helpers ----

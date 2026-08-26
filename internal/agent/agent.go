@@ -334,10 +334,19 @@ func (a *Agent) RunWithResult(ctx context.Context, t Task) (*Result, error) {
 
 			tool, ok := a.registry.Get(tc.Name)
 			if !ok {
-				// Error recovery: tool not found -> record error result and continue.
+				// Error recovery: the model hallucinated a tool name.
+				// Return the canonical structured error including the real
+				// tool list so the model can pick an actual tool next turn.
 				history = append(history, Message{
 					Role:    RoleToolResult,
-					Content: fmt.Sprintf("tool %q not found. Available tools: %v", tc.Name, a.registry.Names()),
+					Content: a.registry.UnknownToolPayload(tc.Name) + "\nRecover by selecting a real tool from available_tools and retrying.",
+				})
+				continue
+			}
+			if verr := a.registry.Validate(tc.Name, tc.Input); verr != nil {
+				history = append(history, Message{
+					Role:    RoleToolResult,
+					Content: "invalid_tool_call: " + verr.Error(),
 				})
 				continue
 			}

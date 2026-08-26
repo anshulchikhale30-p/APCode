@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -346,6 +347,8 @@ func (r *REPL) handleSlashCommand(ctx context.Context, input string) bool {
 		r.handleCompact()
 	case "/permissions":
 		r.handlePermissions()
+	case "/tools":
+		r.handleTools()
 	case "/rollback":
 		r.handleRollback()
 	case "/exit", "/quit", "/q":
@@ -370,6 +373,7 @@ func (r *REPL) printHelp() {
 		{"/plan", "show the plan from the current/last task"},
 		{"/compact", "compact conversation history"},
 		{"/permissions", "show the tool permission policy"},
+		{"/tools", "list every registered agent tool + schema"},
 		{"/git", "show git diff + status"},
 		{"/diff", "show git diff"},
 		{"/status", "show git status"},
@@ -533,12 +537,15 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 	modified := false
 	repairAttempts := 0
 	planEmitted := false
-	// The agent system prompt: instructs the model to behave like a software
-	// engineer — inspect before modifying, prefer tools, minimal changes.
-	systemPrompt := "You are APCode, an offline AI coding agent working inside the user's project. " +
+	// The agent system prompt. The tool catalog comes from the registry —
+	// the single source of truth — so the model can only ever see tools
+	// that APCode actually has.
+	systemPrompt := "You are APCode, an offline AI coding agent working inside the user's project at " + r.Workspace + ".\n" +
 		"Rules: inspect before modifying; use tools instead of guessing; make minimal changes that preserve existing architecture; " +
-		"avoid unrelated changes; validate changes by running tests when available; never claim success without verification. " +
-		"To act, respond with JSON: {\"tool\":\"<name>\",\"input\":{...}}. To finish, respond with plain text only."
+		"avoid unrelated changes; validate changes by running tests when available; never claim success without verification.\n" +
+		"FILE RULES: never assume or invent file names or paths (no App.css/App.js guesses). " +
+		"Only reference files you have seen in tool results. Discover real files with list_files/search first.\n" +
+		r.Registry.DefinitionsForPrompt()
 	for iter := 0; iter < maxIter; iter++ {
 		historyStr := ""
 		if len(r.History) > 0 {
@@ -690,12 +697,23 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 				}
 			}
 			fmt.Fprintf(r.Out, "%s %s...\n", tui.Muted("  Executing:"), tc.Name)
-			tool, ok := r.Registry.Get(tc.Name)
-			if !ok {
-				r.History = append(r.History, Message{Role: "tool_result", Content: fmt.Sprintf("Tool %s not found", tc.Name)})
+			// Pre-execution validation: tool exists? required params present?
+			if verr := r.Registry.Validate(tc.Name, tc.Input); verr != nil {
+				var payload string
+				if tools.IsToolError(verr, tools.CodeNotFound) {
+					payload = r.Registry.UnknownToolPayload(tc.Name)
+					fmt.Fprintf(r.Out, "%s\n", tui.Error("  ✗ Unknown tool: "+tc.Name))
+				} else {
+					payload = fmt.Sprintf(`{"error":"invalid_tool_call","tool":%q,"problem":%q}`, tc.Name, verr.Error())
+					fmt.Fprintf(r.Out, "%s\n", tui.Error("  ✗ Invalid tool call: "+verr.Error()))
+				}
+				r.History = append(r.History, Message{
+					Role:    "tool_result",
+					Content: payload + "\nRecover by selecting a real tool from available_tools and retrying.",
+				})
 				continue
 			}
-			res, err := tool.Execute(ctx, tc.Input)
+			res, err := r.Registry.Execute(ctx, tc.Name, tc.Input)
 			var out string
 			if err != nil {
 				out = "Tool error: " + err.Error()
@@ -771,100 +789,158 @@ func truncateForHistory(s string, max int) string {
 	return s[:max] + "\n...[truncated]"
 }
 
+// parseToolCalls extracts EVERY tool call from model output. Small local
+// models frequently emit several fenced JSON blocks interleaved with prose,
+// or concatenated objects; the old first-{-to-last-} scan failed on those
+// and the agent silently executed nothing while hallucinating results.
+// Strategy:
+//  1. every ```...``` fenced block is parsed independently
+//  2. remaining text is scanned for balanced top-level JSON objects with a
+//     "tool" field (string/escape aware, so prose between them is fine)
+//  3. arrays of tool calls and {"tool_calls":[...]} wrappers are honoured
 func parseToolCalls(text string) ([]struct {
 	Name  string
 	Input map[string]string
 }, string, error) {
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" {
-		return nil, "", nil
+	type call = struct {
+		Name  string
+		Input map[string]string
 	}
-	// Try to extract JSON block and use proper JSON unmarshaling to handle escapes
-	start := strings.Index(trimmed, "{")
-	end := strings.LastIndex(trimmed, "}")
-	if start != -1 && end != -1 && end > start && strings.Contains(trimmed, "\"tool\"") {
-		sub := trimmed[start : end+1]
+	var calls []call
+
+	appendObj := func(obj map[string]interface{}) {
+		for _, extracted := range extractToolObjs(obj) {
+			calls = append(calls, call{Name: extracted.name, Input: extracted.input})
+		}
+	}
+
+	handleJSON := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
 		var obj map[string]interface{}
-		if err := json.Unmarshal([]byte(sub), &obj); err == nil {
-			// Check for tool field
-			toolName := ""
-			if v, ok := obj["tool"]; ok {
-				if s, ok := v.(string); ok {
-					toolName = s
-				}
-			}
-			if toolName != "" {
-				input := make(map[string]string)
-				if raw, ok := obj["input"]; ok {
-					if m, ok := raw.(map[string]interface{}); ok {
-						for k, v := range m {
-							input[k] = fmt.Sprint(v)
-						}
-					}
-				}
-				return []struct {
-					Name  string
-					Input map[string]string
-				}{{Name: toolName, Input: input}}, "", nil
-			}
+		if err := json.Unmarshal([]byte(s), &obj); err == nil {
+			appendObj(obj)
+			return
 		}
-		// Try array form
 		var arr []map[string]interface{}
-		if err := json.Unmarshal([]byte(sub), &arr); err == nil && len(arr) > 0 {
-			var calls []struct {
-				Name  string
-				Input map[string]string
-			}
+		if err := json.Unmarshal([]byte(s), &arr); err == nil {
 			for _, m := range arr {
-				if tn, ok := m["tool"].(string); ok && tn != "" {
-					input := make(map[string]string)
-					if raw, ok := m["input"]; ok {
-						if mm, ok := raw.(map[string]interface{}); ok {
-							for k, v := range mm {
-								input[k] = fmt.Sprint(v)
-							}
-						}
-					}
-					calls = append(calls, struct {
-						Name  string
-						Input map[string]string
-					}{Name: tn, Input: input})
-				}
-			}
-			if len(calls) > 0 {
-				return calls, "", nil
-			}
-		} else if strings.HasPrefix(sub, "{") && strings.HasSuffix(sub, "}") && strings.Count(sub, "\"tool\"") > 1 {
-			// Multiple concatenated JSON objects like {...},{...} - wrap in brackets
-			var arr2 []map[string]interface{}
-			if err := json.Unmarshal([]byte("["+sub+"]"), &arr2); err == nil && len(arr2) > 0 {
-				var calls []struct {
-					Name  string
-					Input map[string]string
-				}
-				for _, m := range arr2 {
-					if tn, ok := m["tool"].(string); ok && tn != "" {
-						input := make(map[string]string)
-						if raw, ok := m["input"]; ok {
-							if mm, ok := raw.(map[string]interface{}); ok {
-								for k, v := range mm {
-									input[k] = fmt.Sprint(v)
-								}
-							}
-						}
-						calls = append(calls, struct {
-							Name  string
-							Input map[string]string
-						}{Name: tn, Input: input})
-					}
-				}
-				if len(calls) > 0 {
-					return calls, "", nil
-				}
+				appendObj(m)
 			}
 		}
 	}
-	return nil, trimmed, nil
+
+	remaining := text
+	// 1. Fenced blocks.
+	for {
+		i := strings.Index(remaining, "```")
+		if i == -1 {
+			break
+		}
+		j := strings.Index(remaining[i+3:], "```")
+		if j == -1 {
+			break
+		}
+		inner := remaining[i+3 : i+3+j]
+		inner = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(inner), "json"))
+		handleJSON(inner)
+		remaining = remaining[:i] + remaining[i+3+j+3:]
+	}
+
+	// 2. Balanced JSON object scan over what's left.
+	for {
+		start := strings.Index(remaining, "{")
+		if start == -1 {
+			break
+		}
+		end := balancedJSONEnd(remaining[start:])
+		if end == -1 {
+			break
+		}
+		handleJSON(remaining[start : start+end+1])
+		remaining = remaining[:start] + remaining[start+end+1:]
+	}
+
+	if len(calls) == 0 {
+		return nil, strings.TrimSpace(text), nil
+	}
+	return calls, "", nil
+}
+
+type namedTool struct {
+	name  string
+	input map[string]string
+}
+
+// extractToolObjs pulls tool calls from one decoded JSON object, honouring
+// single form, {"tool_calls":[...]}, and array entries.
+func extractToolObjs(obj map[string]interface{}) []namedTool {
+	var out []namedTool
+	add := func(m map[string]interface{}) {
+		tn, _ := m["tool"].(string)
+		if tn == "" {
+			if n, ok := m["name"].(string); ok {
+				tn = n
+			}
+		}
+		if tn == "" {
+			return
+		}
+		input := make(map[string]string)
+		switch raw := m["input"].(type) {
+		case map[string]interface{}:
+			for k, v := range raw {
+				input[k] = fmt.Sprint(v)
+			}
+		case string:
+			var parsed map[string]interface{}
+			if json.Unmarshal([]byte(raw), &parsed) == nil {
+				for k, v := range parsed {
+					input[k] = fmt.Sprint(v)
+				}
+			} else if raw != "" {
+				input["value"] = raw
+			}
+		}
+		out = append(out, namedTool{name: strings.TrimSpace(tn), input: input})
+	}
+	add(obj)
+	if raw, ok := obj["tool_calls"].([]interface{}); ok {
+		for _, item := range raw {
+			if m, ok := item.(map[string]interface{}); ok {
+				add(m)
+			}
+		}
+	}
+	return out
+}
+
+// balancedJSONEnd returns the index of the '}' closing the leading '{',
+// honouring strings and escapes; -1 when unbalanced.
+func balancedJSONEnd(s string) int {
+	depth := 0
+	inStr := false
+	esc := false
+	for i, r := range s {
+		switch {
+		case esc:
+			esc = false
+		case inStr && r == '\\':
+			esc = true
+		case r == '"':
+			inStr = !inStr
+		case !inStr && r == '{':
+			depth++
+		case !inStr && r == '}':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 func formatBytes(bytes uint64) string {
@@ -988,6 +1064,35 @@ func (r *REPL) handleCompact() {
 	compacted = append(compacted, r.History[len(r.History)-keepRecent:]...)
 	r.History = compacted
 	fmt.Fprintf(r.Out, "%s\n", tui.Success(fmt.Sprintf("✓ Compacted: removed %d older messages.", dropped)))
+}
+
+// handleTools prints the exact tool catalog from the registry — the same
+// definitions the model receives in its prompt.
+func (r *REPL) handleTools() {
+	list := r.Registry.List()
+	fmt.Fprintf(r.Out, "%s %d registered tool(s)\n", tui.Header("Registered Tools"), len(list))
+	for _, tl := range list {
+		schema := tl.InputSchema()
+		var params []string
+		for name, p := range schema.Properties {
+			required := ""
+			for _, req := range schema.Required {
+				if req == name {
+					required = " (required)"
+					break
+				}
+			}
+			params = append(params, fmt.Sprintf("%s: %s%s", name, p.Type, required))
+		}
+		sort.Strings(params)
+		fmt.Fprintf(r.Out, "\n  %s\n", tui.Primary(tl.Name()))
+		fmt.Fprintf(r.Out, "  description : %s\n", tl.Description())
+		if len(params) > 0 {
+			fmt.Fprintf(r.Out, "  parameters  : %s\n", strings.Join(params, ", "))
+		} else {
+			fmt.Fprintf(r.Out, "  parameters  : (none)\n")
+		}
+	}
 }
 
 // handlePermissions prints the current permission policy.

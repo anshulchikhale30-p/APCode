@@ -72,13 +72,48 @@ func NewGitStatusSpec(workspace ...string) *GitStatusSpec {
 func (t *GitStatusSpec) Name() string { return "git_status" }
 
 // RegisterSpecTools registers all spec-compliant tools into the given registry.
+// EditFileSpec is an alias for EditFileTool with spec name "edit_file".
+type EditFileSpec struct {
+	*EditFileTool
+}
+
+func NewEditFileSpec(workspace ...string) *EditFileSpec {
+	return &EditFileSpec{EditFileTool: NewEditFileTool(workspace...)}
+}
+func (t *EditFileSpec) Name() string { return "edit_file" }
+
+// GitLogSpec is an alias for GitLogTool with spec name "git_log".
+type GitLogSpec struct {
+	*GitLogTool
+}
+
+func NewGitLogSpec(workspace ...string) *GitLogSpec {
+	return &GitLogSpec{GitLogTool: NewGitLogTool(workspace...)}
+}
+func (t *GitLogSpec) Name() string { return "git_log" }
+
+// ListFilesSpec is an alias for ListDirectoryTool with spec name "list_files".
+type ListFilesSpec struct {
+	*ListDirectoryTool
+}
+
+func NewListFilesSpec(workspace ...string) *ListFilesSpec {
+	return &ListFilesSpec{ListDirectoryTool: NewListDirectoryTool(workspace...)}
+}
+func (t *ListFilesSpec) Name() string { return "list_files" }
+
+// RegisterSpecTools registers the canonical snake_case tool names, replacing
+// any legacy CamelCase spellings of the same capability. After this call the
+// registry exposes exactly one identifier per capability, and that is what
+// the model is told about.
 func RegisterSpecTools(r *Registry, workspace string) {
-	_ = r.Register(NewReadFileSpec(workspace))
-	_ = r.Register(NewSearchSpec(workspace))
-	_ = r.Register(NewWriteFileSpec(workspace))
-	_ = r.Register(NewShellSpec(workspace))
-	_ = r.Register(NewGitDiffSpec(workspace))
-	_ = r.Register(NewGitStatusSpec(workspace))
-	// Also register original tools for backward compat (if not already)
-	// They are already registered via DefaultRegistry, but ensure spec names are primary
+	_ = r.ReplaceWithLegacy(NewReadFileSpec(workspace), "ReadFile")
+	_ = r.ReplaceWithLegacy(NewSearchSpec(workspace), "SearchFiles")
+	_ = r.ReplaceWithLegacy(NewWriteFileSpec(workspace), "WriteFile")
+	_ = r.ReplaceWithLegacy(NewEditFileSpec(workspace), "EditFile")
+	_ = r.ReplaceWithLegacy(NewShellSpec(workspace), "RunCommand")
+	_ = r.ReplaceWithLegacy(NewGitDiffSpec(workspace), "GitDiff")
+	_ = r.ReplaceWithLegacy(NewGitStatusSpec(workspace), "GitStatus")
+	_ = r.ReplaceWithLegacy(NewGitLogSpec(workspace), "GitLog")
+	_ = r.ReplaceWithLegacy(NewListFilesSpec(workspace), "ListDirectory", "list_files")
 }
