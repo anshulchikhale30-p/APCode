@@ -13,8 +13,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
+	"apcode/internal/benchmark"
 	"apcode/internal/config"
 	projectcontext "apcode/internal/context"
 	"apcode/internal/hardware"
@@ -43,6 +43,7 @@ type REPL struct {
 	History     []Message
 	Journal     *Journal
 	NoColor     bool
+	CmdHistory  []string // previously entered commands/prompts
 	lastPlan    string
 	reader      *bufio.Reader
 }
@@ -150,7 +151,7 @@ func (r *REPL) Run(ctx context.Context) error {
 	signal.Notify(sigCh, os.Interrupt)
 	defer signal.Stop(sigCh)
 
-	r.printBanner()
+	r.printWelcome()
 
 	if ctx == nil {
 		ctx = context.Background()
@@ -168,7 +169,9 @@ func (r *REPL) Run(ctx context.Context) error {
 		default:
 		}
 
-		fmt.Fprint(r.Out, tui.Primary("You")+" "+tui.Muted("❯ "))
+		boxWidth := tui.BoxWidth(r.uiWidth())
+		fmt.Fprintln(r.Out, tui.InputBoxTop(boxWidth))
+		fmt.Fprint(r.Out, tui.InputBoxPrefix())
 
 		lineCh := make(chan string, 1)
 		errCh := make(chan error, 1)
@@ -183,21 +186,28 @@ func (r *REPL) Run(ctx context.Context) error {
 
 		select {
 		case <-sigCh:
+			fmt.Fprintln(r.Out, "\n"+tui.InputBoxBottom(boxWidth))
 			fmt.Fprintln(r.Out, "^C")
 			fmt.Fprintln(r.Out, tui.Muted("(Ctrl+C) - type /exit to quit"))
 			continue
 		case err := <-errCh:
 			if err == io.EOF {
-				fmt.Fprintln(r.Out, "\n"+tui.Muted("Goodbye!"))
+				fmt.Fprintln(r.Out, tui.InputBoxBottom(boxWidth))
+				fmt.Fprintln(r.Out, tui.Muted("Goodbye!"))
 				return nil
 			}
 			fmt.Fprintf(r.ErrOut, "read error: %v\n", err)
 			continue
 		case line := <-lineCh:
+			if !r.interactiveOut() {
+				fmt.Fprintln(r.Out)
+			}
+			fmt.Fprintln(r.Out, tui.InputBoxBottom(boxWidth))
 			input := strings.TrimSpace(line)
 			if input == "" {
 				continue
 			}
+			r.CmdHistory = append(r.CmdHistory, input)
 			if strings.HasPrefix(input, "/") {
 				shouldExit := r.handleSlashCommand(ctx, input)
 				if shouldExit {
@@ -206,6 +216,8 @@ func (r *REPL) Run(ctx context.Context) error {
 				}
 				continue
 			}
+			fmt.Fprintln(r.Out, tui.FooterHints("Enter ↵ send", r.modelIndicatorText(), r.uiWidth()))
+			fmt.Fprintln(r.Out)
 			r.History = append(r.History, Message{Role: "user", Content: input})
 			r.Journal.BeginGroup()
 			agentCtx, cancel := context.WithCancel(ctx)
@@ -226,90 +238,75 @@ func (r *REPL) Run(ctx context.Context) error {
 			r.Journal.EndGroup()
 			if err != nil {
 				if err == context.Canceled {
-					fmt.Fprintln(r.Out, tui.Muted("Cancelled."))
+					fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityWarning, "Cancelled."))
 				} else {
-					fmt.Fprintf(r.Out, "%s %v\n", tui.Error("Error:"), err)
+					fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityError, err.Error()))
 				}
 				continue
 			}
 			r.History = append(r.History, Message{Role: "assistant", Content: response})
-			fmt.Fprintf(r.Out, "\n%s %s\n\n", tui.Secondary("APCode")+" "+tui.Muted("›"), response)
+			fmt.Fprintf(r.Out, "\n%s\n", tui.Secondary("APCode"))
+			fmt.Fprintf(r.Out, "%s\n\n", tui.ResponseBlock(response, r.uiWidth()))
 		}
 	}
 }
 
-func (r *REPL) printBanner() {
-	fmt.Fprintln(r.Out, tui.Primary(tui.Banner()))
+// uiWidth returns the terminal width for layout decisions, defaulting to a
+// safe value when output is not a terminal or the size cannot be detected.
+func (r *REPL) uiWidth() int {
+	if r.interactiveOut() {
+		return tui.TerminalWidth()
+	}
+	return 80
+}
+
+// interactiveOut reports whether output is attached to a real terminal.
+func (r *REPL) interactiveOut() bool {
+	return tui.IsTerminalWriter(r.Out)
+}
+
+// printWelcome renders the APCode welcome screen from real session state.
+func (r *REPL) printWelcome() {
+	width := r.uiWidth()
+	fmt.Fprint(r.Out, tui.WelcomeScreen(tui.WelcomeOptions{
+		Version:     config.Version,
+		Commands:    tui.DefaultMenuCommands(),
+		ProjectLine: r.projectLine(),
+		Width:       width,
+	}))
+	fmt.Fprintln(r.Out, tui.FooterHints("Type a task and press Enter", r.modelIndicatorText(), width))
 	fmt.Fprintln(r.Out)
-	status := tui.Success("✓")
+}
+
+// projectLine builds the compact project summary from detected state.
+func (r *REPL) projectLine() string {
+	lang := "unknown"
+	files := 0
 	if r.ProjectCtx != nil {
-		lang := "unknown"
-		if len(r.ProjectCtx.Languages) > 0 {
-			max := 0
-			for l, c := range r.ProjectCtx.Languages {
-				if c > max {
-					max = c
-					lang = l
-				}
+		files = len(r.ProjectCtx.Files)
+		max := 0
+		for l, c := range r.ProjectCtx.Languages {
+			if c > max {
+				max = c
+				lang = l
 			}
 		}
-		fmt.Fprintf(r.Out, "%s %s\n", status, fmt.Sprintf("Project detected (%s, %d files)", lang, len(r.ProjectCtx.Files)))
-	} else {
-		fmt.Fprintf(r.Out, "%s %s\n", tui.Warning("○"), "No project detected")
 	}
-	if r.IsGitRepo {
-		branchInfo := ""
-		if r.GitBranch != "" {
-			branchInfo = fmt.Sprintf(" (%s)", r.GitBranch)
-		}
-		fmt.Fprintf(r.Out, "%s %s\n", status, "Git repository detected"+branchInfo)
-	} else {
-		fmt.Fprintf(r.Out, "%s %s\n", tui.Muted("○"), "Not a git repository")
+	return tui.ProjectLine(lang, files, r.IsGitRepo, r.GitBranch)
+}
+
+// modelIndicatorText describes the selected runtime/model without ever
+// claiming availability that does not exist.
+func (r *REPL) modelIndicatorText() string {
+	rtName := r.RuntimeName
+	if rtName == "" && r.Runtime != nil {
+		rtName = string(r.Runtime.Type())
 	}
-	if r.Runtime != nil {
-		avail := runtime.IsAvailable(context.Background(), r.Runtime)
-		if avail {
-			name := r.RuntimeName
-			if name == "" {
-				name = string(r.Runtime.Type())
-			}
-			fmt.Fprintf(r.Out, "%s %s\n", status, fmt.Sprintf("Runtime ready (%s)", name))
-		} else {
-			fmt.Fprintf(r.Out, "%s %s\n", tui.Warning("○"), "Runtime not available")
-		}
-	} else {
-		fmt.Fprintf(r.Out, "%s %s\n", tui.Warning("○"), "No runtime detected")
-	}
+	modelName := ""
 	if r.Model != nil {
-		fmt.Fprintf(r.Out, "%s %s\n", status, fmt.Sprintf("Local model: %s (%s)", r.Model.Name, r.Model.ID))
-		// Try to load to show "Model loaded"
-		// Memory safety check before loading
-		hw, _ := hardware.Detect()
-		availableRAM := hw.TotalRAMBytes
-		if hw.AvailableRAMKnown && hw.AvailableRAMBytes > 0 {
-			availableRAM = hw.AvailableRAMBytes
-		}
-		if availableRAM > 0 && availableRAM < r.Model.MinimumRAMBytes {
-			fmt.Fprintf(r.Out, "%s %s (requires %s, available %s)\n", tui.Warning("⚠"), "Insufficient RAM for model", formatBytes(r.Model.MinimumRAMBytes), formatBytes(availableRAM))
-		} else {
-			// Try loading
-			ctxLoad, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			err := r.Runtime.Load(ctxLoad, r.Model)
-			cancel()
-			if err == nil {
-				fmt.Fprintf(r.Out, "%s %s\n", status, "Model loaded")
-				_ = r.Runtime.Unload(context.Background())
-			} else {
-				fmt.Fprintf(r.Out, "%s %s: %v\n", tui.Warning("○"), "Model not loaded", err)
-			}
-		}
-	} else {
-		fmt.Fprintf(r.Out, "%s %s\n", tui.Warning("○"), "No local model installed")
-		fmt.Fprintf(r.Out, "  %s\n", tui.Muted("Use: apcode models"))
+		modelName = r.Model.Name
 	}
-	fmt.Fprintln(r.Out)
-	fmt.Fprintln(r.Out, tui.Muted(fmt.Sprintf("APCode v%s · offline-first · type /help for commands", config.Version)))
-	fmt.Fprintln(r.Out)
+	return tui.ModelIndicator(rtName, modelName)
 }
 
 func (r *REPL) handleSlashCommand(ctx context.Context, input string) bool {
@@ -321,7 +318,9 @@ func (r *REPL) handleSlashCommand(ctx context.Context, input string) bool {
 		r.printHelp()
 	case "/clear", "/cls":
 		fmt.Fprint(r.Out, "\033[H\033[2J")
-		r.printBanner()
+		r.printWelcome()
+	case "/new", "/session":
+		r.handleNewSession()
 	case "/context", "/ctx":
 		r.handleContext()
 	case "/models":
@@ -335,6 +334,8 @@ func (r *REPL) handleSlashCommand(ctx context.Context, input string) bool {
 		r.handleStatus()
 	case "/status", "/st":
 		r.handleStatus()
+	case "/benchmark", "/bench":
+		r.handleBenchmark(ctx)
 	case "/files":
 		r.handleFiles()
 	case "/search":
@@ -360,31 +361,83 @@ func (r *REPL) handleSlashCommand(ctx context.Context, input string) bool {
 }
 
 func (r *REPL) printHelp() {
-	fmt.Fprintln(r.Out, tui.Header("Available commands"))
+	fmt.Fprintln(r.Out, tui.Bold("APCode Commands"))
 	cmds := []struct{ cmd, desc string }{
-		{"/help", "show this help"},
-		{"/clear", "clear screen and redraw banner"},
-		{"/context", "show project context summary"},
-		{"/files [dir]", "list files via the agent's file tool"},
-		{"/search <query>", "search files in the workspace"},
-		{"/models", "list local models"},
-		{"/model", "show the currently selected model"},
-		{"/runtime", "show runtime status"},
-		{"/plan", "show the plan from the current/last task"},
-		{"/compact", "compact conversation history"},
-		{"/permissions", "show the tool permission policy"},
-		{"/tools", "list every registered agent tool + schema"},
-		{"/git", "show git diff + status"},
-		{"/diff", "show git diff"},
-		{"/status", "show git status"},
-		{"/rollback", "revert the last APCode change set"},
-		{"/exit", "exit the REPL"},
+		{"/help", "Show this help"},
+		{"/new", "New session (clears conversation)"},
+		{"/models", "List available models"},
+		{"/model", "Show the currently selected model"},
+		{"/runtime", "Show runtime status"},
+		{"/status", "Show project and system status"},
+		{"/benchmark", "Run hardware benchmark"},
+		{"/context", "Show project context summary"},
+		{"/files [dir]", "List files via the agent's file tool"},
+		{"/search <query>", "Search files in the workspace"},
+		{"/plan", "Show the plan from the current/last task"},
+		{"/compact", "Compact conversation history"},
+		{"/permissions", "Show the tool permission policy"},
+		{"/tools", "List every registered agent tool + schema"},
+		{"/git", "Show git diff + status"},
+		{"/diff", "Show git diff"},
+		{"/rollback", "Revert the last APCode change set"},
+		{"/clear", "Clear screen and redraw welcome"},
+		{"/exit", "Exit APCode"},
 	}
 	for _, c := range cmds {
-		fmt.Fprintf(r.Out, "  %s %s\n", tui.Primary(fmt.Sprintf("%-9s", c.cmd)), tui.Muted(c.desc))
+		fmt.Fprintf(r.Out, "  %s %s\n", tui.Primary(fmt.Sprintf("%-16s", c.cmd)), tui.Muted(c.desc))
+	}
+	fmt.Fprintln(r.Out)
+	fmt.Fprintln(r.Out, tui.Bold("Keyboard"))
+	keys := []struct{ key, desc string }{
+		{"Ctrl+C", "Cancel current operation / exit hint"},
+	}
+	for _, k := range keys {
+		fmt.Fprintf(r.Out, "  %s %s\n", tui.Primary(fmt.Sprintf("%-16s", k.key)), tui.Muted(k.desc))
 	}
 	fmt.Fprintln(r.Out)
 	fmt.Fprintln(r.Out, tui.Muted("Any other text is sent to the AI agent."))
+}
+
+// handleNewSession starts fresh: conversation history and plan are cleared
+// (the journal is kept so /rollback can still revert earlier changes).
+func (r *REPL) handleNewSession() {
+	r.History = []Message{}
+	r.lastPlan = ""
+	r.CmdHistory = nil
+	fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivitySuccess, "New session started."))
+	r.printWelcome()
+}
+
+// handleBenchmark runs the hardware benchmark through the benchmark
+// package and prints a compact result summary.
+func (r *REPL) handleBenchmark(ctx context.Context) {
+	sp := tui.NewSpinner(r.Out, "Running benchmark...", r.interactiveOut())
+	sp.Ctx = ctx
+	sp.Start()
+	cfg := benchmark.DefaultConfig()
+	runner := &benchmark.BenchmarkRunner{}
+	res, err := runner.Run(ctx, r.Hardware, cfg)
+	sp.Stop()
+	if err != nil {
+		fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityError, "Benchmark failed: "+err.Error()))
+		return
+	}
+	if res.CPU.Success {
+		fmt.Fprintf(r.Out, "%s\n", tui.ActivityLine(tui.ActivitySuccess, fmt.Sprintf("CPU: %.0f ops/sec", res.CPU.OperationsPerSec)))
+	} else {
+		fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityWarning, "CPU: unavailable"))
+	}
+	if res.Memory.Success {
+		fmt.Fprintf(r.Out, "%s\n", tui.ActivityLine(tui.ActivitySuccess, fmt.Sprintf("Memory: %.2f MiB/s", res.Memory.BytesPerSec/(1024*1024))))
+	} else {
+		fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityWarning, "Memory: unavailable"))
+	}
+	if res.Storage.Success {
+		fmt.Fprintf(r.Out, "%s\n", tui.ActivityLine(tui.ActivitySuccess, fmt.Sprintf("Storage: write %.2f MiB/s, read %.2f MiB/s",
+			res.Storage.WriteBytesPerSec/(1024*1024), res.Storage.ReadBytesPerSec/(1024*1024))))
+	} else {
+		fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityWarning, "Storage: unavailable"))
+	}
 }
 
 func (r *REPL) handleContext() {
@@ -475,32 +528,91 @@ func (r *REPL) handleDiff(ctx context.Context) {
 		return
 	}
 	fmt.Fprintln(r.Out, tui.Primary("Diff:"))
-	fmt.Fprintln(r.Out, res.Output)
+	fmt.Fprintln(r.Out, tui.RenderDiff(res.Output))
 }
 
+// handleStatus renders the full project/system/runtime status screen.
 func (r *REPL) handleStatus() {
+	lang := "unknown"
+	files := 0
+	if r.ProjectCtx != nil {
+		files = len(r.ProjectCtx.Files)
+		max := 0
+		for l, c := range r.ProjectCtx.Languages {
+			if c > max {
+				max = c
+				lang = l
+			}
+		}
+	}
+
+	changes := ""
+	if tool, ok := r.gitTool(); ok {
+		res, err := tool.Execute(context.Background(), tools.Input{})
+		if err == nil && res.Err == nil {
+			lines := strings.Count(strings.TrimSpace(res.Output), "\n") + 1
+			if strings.TrimSpace(res.Output) == "" {
+				changes = "clean"
+			} else if lines == 1 {
+				changes = "1 changed file"
+			} else {
+				changes = fmt.Sprintf("%d changed files", lines)
+			}
+		}
+	}
+
+	gpuName := ""
+	if r.Hardware.GPU.Known {
+		gpuName = r.Hardware.GPU.Name
+	}
+
+	rtState := "not detected"
+	rtReady := false
+	rtName := r.RuntimeName
+	if rtName == "" && r.Runtime != nil {
+		rtName = string(r.Runtime.Type())
+	}
+	switch {
+	case r.Runtime == nil:
+	case !runtime.IsAvailable(context.Background(), r.Runtime):
+		rtState = "unavailable"
+	case r.Model == nil:
+		rtState = "no model installed"
+	default:
+		rtState = "Ready"
+		rtReady = true
+	}
+
+	modelLabel := ""
+	if r.Model != nil {
+		modelLabel = r.Model.Name
+	}
+
+	tui.RenderStatus(r.Out, tui.StatusData{
+		Version:         config.Version,
+		ProjectLanguage: lang,
+		ProjectFiles:    files,
+		GitRepo:         r.IsGitRepo,
+		GitBranch:       r.GitBranch,
+		GitChanges:      changes,
+		OS:              r.Hardware.OS + "/" + r.Hardware.Arch,
+		CPU:             fmt.Sprintf("%d threads", r.Hardware.LogicalCPUs),
+		RAM:             formatBytes(r.Hardware.TotalRAMBytes),
+		GPU:             gpuName,
+		RuntimeName:     rtName,
+		RuntimeModel:    modelLabel,
+		RuntimeState:    rtState,
+		RuntimeReady:    rtReady,
+	})
+}
+
+// gitTool returns the registry's git status tool, tolerating naming variants.
+func (r *REPL) gitTool() (tools.Tool, bool) {
 	tool, ok := r.Registry.Get("git_status")
 	if !ok {
 		tool, ok = r.Registry.Get("GitStatus")
 	}
-	if !ok {
-		fmt.Fprintln(r.ErrOut, "git_status tool not available")
-		return
-	}
-	res, err := tool.Execute(context.Background(), tools.Input{})
-	if err != nil {
-		fmt.Fprintf(r.ErrOut, "status error: %v\n", err)
-		return
-	}
-	if res.Err != nil {
-		fmt.Fprintf(r.Out, "%s %v\n", tui.Warning("Status:"), res.Err)
-		return
-	}
-	fmt.Fprintln(r.Out, tui.Primary("Status:"))
-	fmt.Fprintln(r.Out, res.Output)
-	if strings.TrimSpace(res.Output) == "" {
-		fmt.Fprintln(r.Out, tui.Muted("Working tree clean."))
-	}
+	return tool, ok
 }
 
 // runAgent handles normal user text via agent/runtime with loop and history.
@@ -573,11 +685,18 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 			fullPrompt = fmt.Sprintf("Project: %s (%d files)\n%s\n\nUser: %s", r.Workspace, len(r.ProjectCtx.Files), historyStr, prompt)
 		}
 		fullPrompt = systemPrompt + "\n\n" + fullPrompt
-		if iter == 0 {
-			fmt.Fprintln(r.Out, tui.Muted("  ⋯ thinking..."))
-		}
 		req := runtime.GenerateRequest{Prompt: fullPrompt, Options: runtime.GenerateOptions{MaxTokens: 512}}
-		resp, err := r.Runtime.Generate(ctx, req)
+		var resp *runtime.GenerateResponse
+		var err error
+		if iter == 0 {
+			sp := tui.NewSpinner(r.Out, "Thinking...", r.interactiveOut())
+			sp.Ctx = ctx
+			sp.Start()
+			resp, err = r.Runtime.Generate(ctx, req)
+			sp.Stop()
+		} else {
+			resp, err = r.Runtime.Generate(ctx, req)
+		}
 		if err != nil {
 			return "", fmt.Errorf("Inference failed: %v", err)
 		}
@@ -590,7 +709,7 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 		}
 		if plan := extractPlan(text); plan != "" {
 			r.lastPlan = plan
-			fmt.Fprintf(r.Out, "%s\n%s\n", tui.Primary("Plan:"), r.lastPlan)
+			fmt.Fprintf(r.Out, "%s\n%s\n", tui.Accent(tui.GlyphAction+" Plan"), r.lastPlan)
 		}
 		r.History = append(r.History, Message{Role: "assistant", Content: text})
 		toolCalls, answer, _ := parseToolCalls(text)
@@ -616,8 +735,11 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 			// bounded by maxRepairAttempts.
 			if modified && repairAttempts < maxRepairAttempts {
 				repairAttempts++
-				fmt.Fprintln(r.Out, tui.Muted("  Running validation..."))
+				vsp := tui.NewSpinner(r.Out, "Running validation...", r.interactiveOut())
+				vsp.Ctx = ctx
+				vsp.Start()
 				vres, verr := r.Registry.Execute(ctx, "run_tests", tools.Input{})
+				vsp.Stop()
 				if tools.IsToolError(verrOr(vres.Err, verr), tools.CodeNotFound) {
 					fmt.Fprintln(r.Out, tui.Muted("  No test command detected for this project; skipping validation."))
 					return text, nil
@@ -632,20 +754,20 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 					failed = vres.Err != nil
 				}
 				if failed {
-					fmt.Fprintf(r.Out, "%s\n", tui.Error("✗ Validation failed"))
-					fmt.Fprintf(r.Out, "%s\n", tui.Muted("  Investigating failure..."))
+					fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityError, "Validation failed"))
+					fmt.Fprintln(r.Out, tui.Muted("  Investigating failure..."))
 					r.History = append(r.History, Message{
 						Role:    "tool_result",
 						Content: "Validation (run_tests) FAILED. Output:\n" + truncateForHistory(vout, 2000) + "\nInvestigate the failure, fix the code with tools, then run run_tests again.",
 					})
 					continue
 				}
-				fmt.Fprintf(r.Out, "%s\n", tui.Success("✓ Tests passed"))
+				fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivitySuccess, "Tests passed"))
 			}
 			return text, nil
 		}
 		for _, tc := range toolCalls {
-			fmt.Fprintf(r.Out, "%s %s %s\n", tui.Muted("  Tool:"), tc.Name, fmt.Sprintf("%v", tc.Input))
+			fmt.Fprintln(r.Out, tui.ToolSummary(tc.Name, tc.Input))
 			// Unified approval policy: reads are automatic; file writes,
 			// deletes, patches, and non-safe terminal commands require an
 			// explicit [y/N] confirmation.
@@ -696,16 +818,15 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 					tc.Input["confirm"] = "true"
 				}
 			}
-			fmt.Fprintf(r.Out, "%s %s...\n", tui.Muted("  Executing:"), tc.Name)
 			// Pre-execution validation: tool exists? required params present?
 			if verr := r.Registry.Validate(tc.Name, tc.Input); verr != nil {
 				var payload string
 				if tools.IsToolError(verr, tools.CodeNotFound) {
 					payload = r.Registry.UnknownToolPayload(tc.Name)
-					fmt.Fprintf(r.Out, "%s\n", tui.Error("  ✗ Unknown tool: "+tc.Name))
+					fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityError, "Unknown tool: "+tc.Name))
 				} else {
 					payload = fmt.Sprintf(`{"error":"invalid_tool_call","tool":%q,"problem":%q}`, tc.Name, verr.Error())
-					fmt.Fprintf(r.Out, "%s\n", tui.Error("  ✗ Invalid tool call: "+verr.Error()))
+					fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityError, "Invalid tool call: "+verr.Error()))
 				}
 				r.History = append(r.History, Message{
 					Role:    "tool_result",
@@ -717,22 +838,28 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 			var out string
 			if err != nil {
 				out = "Tool error: " + err.Error()
+				fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityError, "Tool failed: "+err.Error()))
 			} else if res.Err != nil {
 				out = "Tool failed: " + res.Err.Error() + "\nOutput: " + res.Output
+				fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityError, "Tool failed: "+res.Err.Error()))
 			} else {
 				out = res.Output
 				if out == "" {
 					out = "(no output)"
 				}
+				fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivitySuccess, tc.Name+" completed"))
 				if isModifyingTool(tc.Name) {
 					modified = true
+					if p := tc.Input["path"]; p != "" {
+						fmt.Fprintln(r.Out, tui.FileChange(p))
+					}
 				}
 			}
 			preview := out
 			if len(preview) > 200 {
 				preview = preview[:200]
 			}
-			fmt.Fprintf(r.Out, "%s\n", tui.Muted("  Result: "+preview))
+			fmt.Fprintf(r.Out, "%s\n", tui.Muted("    "+preview))
 			r.History = append(r.History, Message{Role: "tool_result", Content: "Tool " + tc.Name + " result: " + out})
 		}
 		if iter == maxIter-1 {

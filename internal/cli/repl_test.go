@@ -150,7 +150,7 @@ func TestREPLSlashCommands(t *testing.T) {
 	if shouldExit := repl.handleSlashCommand(context.Background(), "/help"); shouldExit {
 		t.Error("/help should not exit")
 	}
-	if !strings.Contains(out.String(), "Available commands") {
+	if !strings.Contains(out.String(), "APCode Commands") {
 		t.Error("expected help output")
 	}
 	out.Reset()
