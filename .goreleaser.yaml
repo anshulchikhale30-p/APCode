@@ -4,6 +4,8 @@
 
 version: 2
 
+project_name: apcode
+
 before:
   hooks:
     - go mod tidy
@@ -31,14 +33,13 @@ builds:
 
 archives:
   - id: apcode-archive
-    builds:
-      - apcode
-    name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
-      {{- if eq .Os "windows" }}.zip{{ else }}.tar.gz{{ end }}
+    # GoReleaser appends the archive extension itself (.zip for windows via
+    # format_overrides below, .tar.gz otherwise).
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - README.md
       - LICENSE*

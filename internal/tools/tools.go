@@ -238,6 +238,23 @@ func (r *Registry) Get(name string) (Tool, bool) {
 			return t, true
 		}
 	}
+	// Spec aliases: search -> searchfiles, shell -> runcommand
+	if norm == "search" {
+		if t, ok := r.normalized["searchfiles"]; ok {
+			return t, true
+		}
+		if t, ok := r.normalized["search"]; ok {
+			return t, true
+		}
+	}
+	if norm == "shell" {
+		if t, ok := r.normalized["runcommand"]; ok {
+			return t, true
+		}
+		if t, ok := r.normalized["shell"]; ok {
+			return t, true
+		}
+	}
 	return nil, false
 }
 

@@ -184,8 +184,12 @@ docker run --rm -it -v $(pwd):/work ghcr.io/anshulchikhale30-p/APCode recommend
 ## Quick Start
 
 ```sh
-# 1. Check your system
-apcode                          # welcome banner + OS/CPU/RAM/GPU + version
+# 1. Enter interactive mode (like OpenCode)
+apcode                          # starts REPL: banner + project + git + runtime + model
+
+# Or check your system non-interactively
+apcode --help
+apcode --version
 
 # 2. Benchmark your hardware (optional but improves recommendations)
 apcode benchmark
@@ -212,6 +216,28 @@ apcode infer "write a hello world in Go"
 apcode infer --stream --model phi-3-mini-q4 "explain this repo"
 ```
 
+### Interactive REPL
+
+```sh
+apcode
+# ╭──────────────────────────────────────────────────────────╮
+# │                       APCode                             │
+# │             Offline AI Coding Agent                     │
+# ╰──────────────────────────────────────────────────────────╯
+# ✓ Project detected (Go, 88 files)
+# ✓ Git repository detected (main)
+# ✓ Runtime ready (native)
+# ✓ Local model: Qwen2.5-Coder 7B
+# Type /help for commands.
+# You > explain this project
+# APCode > I'll inspect the project structure first...
+# You > /help
+```
+
+Slash commands: `/help`, `/clear`, `/context`, `/models`, `/runtime`, `/diff`, `/status`, `/exit`, `/quit` (Ctrl+C is graceful, not crash).
+
+Conversation history is kept in memory, so follow-ups understand prior context.
+
 ---
 
 ## Vision
@@ -229,7 +255,7 @@ Everything runs locally. No cloud APIs, no data leaving your machine.
 
 - `apcode --version` / `apcode version` — print version (both work, single source `internal/config.Version`)
 - `apcode --help` — print usage
-- `apcode` — welcome banner + system info (OS, arch, CPU, RAM, GPU, version, offline status)
+- `apcode` — **interactive REPL** (banner + project + git + runtime + model, slash commands, history, tool loop) — offline, no cloud
 - `apcode benchmark` — hardware benchmarks (CPU ops/sec, memory bandwidth, optional storage)
 - `apcode models` — list catalog (`models installed`, `models info <id>`)
 - `apcode recommend` — hardware-aware ranking with explanations & uncertainty:
@@ -246,8 +272,9 @@ Everything runs locally. No cloud APIs, no data leaving your machine.
 ## Project Structure
 
 ```
-cmd/apcode/        CLI entry point (welcome, benchmark, models, recommend, context, search, runtime, infer)
+cmd/apcode/        CLI entry point (welcome, benchmark, models, recommend, context, search, runtime, infer, REPL)
 internal/
+    cli/           interactive REPL, slash commands, ProjectContext, conversation history
     agent/         agent loop (plan → act → verify)
     benchmark/     real hardware measurement (CPU/memory/storage)
     codeintel/     symbol extraction, search, imports

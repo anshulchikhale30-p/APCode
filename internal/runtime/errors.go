@@ -20,6 +20,8 @@ const (
 	CodeLoadFailed         = "load_failed"
 	CodeUnloadFailed       = "unload_failed"
 	CodeIOError            = "io_error"
+	CodeInsufficientMemory = "insufficient_memory"
+	CodeModelCorrupted     = "model_corrupted"
 )
 
 // Sentinel errors for errors.Is checks.
@@ -34,6 +36,8 @@ var (
 	ErrGenerationFailed   = &RuntimeError{Code: CodeGenerationFailed, Message: "runtime: generation failed"}
 	ErrCancelled          = &RuntimeError{Code: CodeCancelled, Message: "runtime: cancelled"}
 	ErrRuntimeUnavailable = &RuntimeError{Code: CodeRuntimeUnavailable, Message: "runtime: unavailable"}
+	ErrInsufficientMemory = &RuntimeError{Code: CodeInsufficientMemory, Message: "runtime: insufficient memory"}
+	ErrModelCorrupted     = &RuntimeError{Code: CodeModelCorrupted, Message: "runtime: model corrupted"}
 )
 
 // RuntimeError is a structured error returned by runtime operations.
