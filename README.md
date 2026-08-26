@@ -1,5 +1,11 @@
 # APCode
 
+![CI](https://github.com/anshulchikhale30-p/APCode/actions/workflows/ci.yml/badge.svg)
+![Release](https://github.com/anshulchikhale30-p/APCode/actions/workflows/release.yml/badge.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+
 **Offline-first AI coding agent for the terminal — everything runs on your laptop.**
 
 > We care about your system. 😄  
@@ -8,7 +14,7 @@
 
 APCode is an open source AI coding agent you install in your terminal. It understands your hardware, recommends the right local model, and runs 100% offline — no cloud APIs, no data leaving your machine.
 
-> **v0.1.1 is the next release.** No GitHub Release exists yet — the first release will be `v0.1.1`. The `install.sh`/`install.ps1` scripts work today via `--binary` with a local build. Remote `curl | bash` / `irm | iex` will work **after** a real `v0.1.1` tag is pushed and GoReleaser publishes artifacts. `brew`/`scoop`/`npm`/`winget`/`docker` are **future/planned** and not yet published. See `CONTRIBUTING.md` and `docs/release-test.md`.
+> **Current release: `v0.1.1`.** Precompiled binaries are published for Windows (amd64/arm64), Linux (amd64/arm64), and macOS Intel/Apple Silicon — no Go toolchain needed. The `install.sh`/`install.ps1` scripts download them automatically; `--binary` works with a local build too. `brew`/`scoop`/`npm`/`winget`/`docker` are **future/planned** and not yet published. See `CONTRIBUTING.md` and `docs/release-test.md`.
 
 ---
 
@@ -27,7 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/inst
 Install a specific version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash -s -- --version 0.1.0
+curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash -s -- --version 0.1.1
 ```
 
 Install to a custom directory:
@@ -45,9 +51,9 @@ irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1
 Specific version:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1))) -Version 0.1.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1))) -Version 0.1.1
 # or if you saved it locally:
-.\install.ps1 -Version 0.1.0
+.\install.ps1 -Version 0.1.1
 ```
 
 Local binary (no download):
@@ -71,7 +77,7 @@ export PATH="$HOME/.apcode/bin:$PATH"   # bash/zsh
 Verify:
 
 ```sh
-apcode --version   # APCode 0.1.0
+apcode --version   # APCode 0.1.1
 apcode version     # same
 apcode --help
 apcode             # branded TUI + hardware
@@ -151,16 +157,16 @@ choco install apcode
 
 **Manual binary download:**
 
-Grab the binary for your platform from [Releases](https://github.com/anshulchikhale30-p/APCode/releases) (after `v0.1.0` is published):
+Grab the binary for your platform from [Releases](https://github.com/anshulchikhale30-p/APCode/releases):
 
 | Platform | File |
 |---|---|
-| Linux amd64 | `apcode_0.1.0_linux_amd64.tar.gz` |
-| Linux arm64 | `apcode_0.1.0_linux_arm64.tar.gz` |
-| macOS Intel | `apcode_0.1.0_darwin_amd64.tar.gz` |
-| macOS Apple Silicon | `apcode_0.1.0_darwin_arm64.tar.gz` |
-| Windows amd64 | `apcode_0.1.0_windows_amd64.zip` |
-| Windows arm64 | `apcode_0.1.0_windows_arm64.zip` |
+| Linux amd64 | `apcode_0.1.1_linux_amd64.tar.gz` |
+| Linux arm64 | `apcode_0.1.1_linux_arm64.tar.gz` |
+| macOS Intel | `apcode_0.1.1_darwin_amd64.tar.gz` |
+| macOS Apple Silicon | `apcode_0.1.1_darwin_arm64.tar.gz` |
+| Windows amd64 | `apcode_0.1.1_windows_amd64.zip` |
+| Windows arm64 | `apcode_0.1.1_windows_arm64.zip` |
 
 Then:
 
@@ -313,7 +319,7 @@ go build -o apcode ./cmd/apcode
 ./apcode --help
 
 # With version via ldflags (like GoReleaser)
-go build -ldflags "-X apcode/internal/config.Version=0.1.0" -o apcode ./cmd/apcode
+go build -ldflags "-X apcode/internal/config.Version=0.1.1" -o apcode ./cmd/apcode
 
 # Using Make (preferred)
 make build          # current platform

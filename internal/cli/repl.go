@@ -159,7 +159,7 @@ func (r *REPL) Run(ctx context.Context) error {
 		default:
 		}
 
-		fmt.Fprint(r.Out, tui.Primary("You > "))
+		fmt.Fprint(r.Out, tui.Primary("You")+" "+tui.Muted("❯ "))
 
 		lineCh := make(chan string, 1)
 		errCh := make(chan error, 1)
@@ -222,7 +222,7 @@ func (r *REPL) Run(ctx context.Context) error {
 				continue
 			}
 			r.History = append(r.History, Message{Role: "assistant", Content: response})
-			fmt.Fprintf(r.Out, "\n%s %s\n\n", tui.Primary("APCode >"), response)
+			fmt.Fprintf(r.Out, "\n%s %s\n\n", tui.Secondary("APCode")+" "+tui.Muted("›"), response)
 		}
 	}
 }
@@ -230,6 +230,7 @@ func (r *REPL) Run(ctx context.Context) error {
 func (r *REPL) printBanner() {
 	fmt.Fprintln(r.Out, tui.Primary(tui.Banner()))
 	fmt.Fprintln(r.Out)
+	status := tui.Success("✓")
 	if r.ProjectCtx != nil {
 		lang := "unknown"
 		if len(r.ProjectCtx.Languages) > 0 {
@@ -241,7 +242,7 @@ func (r *REPL) printBanner() {
 				}
 			}
 		}
-		fmt.Fprintf(r.Out, "%s %s\n", tui.Success("✓"), fmt.Sprintf("Project detected (%s, %d files)", lang, len(r.ProjectCtx.Files)))
+		fmt.Fprintf(r.Out, "%s %s\n", status, fmt.Sprintf("Project detected (%s, %d files)", lang, len(r.ProjectCtx.Files)))
 	} else {
 		fmt.Fprintf(r.Out, "%s %s\n", tui.Warning("○"), "No project detected")
 	}
@@ -250,7 +251,7 @@ func (r *REPL) printBanner() {
 		if r.GitBranch != "" {
 			branchInfo = fmt.Sprintf(" (%s)", r.GitBranch)
 		}
-		fmt.Fprintf(r.Out, "%s %s\n", tui.Success("✓"), "Git repository detected"+branchInfo)
+		fmt.Fprintf(r.Out, "%s %s\n", status, "Git repository detected"+branchInfo)
 	} else {
 		fmt.Fprintf(r.Out, "%s %s\n", tui.Muted("○"), "Not a git repository")
 	}
@@ -261,7 +262,7 @@ func (r *REPL) printBanner() {
 			if name == "" {
 				name = string(r.Runtime.Type())
 			}
-			fmt.Fprintf(r.Out, "%s %s\n", tui.Success("✓"), fmt.Sprintf("Runtime ready (%s)", name))
+			fmt.Fprintf(r.Out, "%s %s\n", status, fmt.Sprintf("Runtime ready (%s)", name))
 		} else {
 			fmt.Fprintf(r.Out, "%s %s\n", tui.Warning("○"), "Runtime not available")
 		}
@@ -269,7 +270,7 @@ func (r *REPL) printBanner() {
 		fmt.Fprintf(r.Out, "%s %s\n", tui.Warning("○"), "No runtime detected")
 	}
 	if r.Model != nil {
-		fmt.Fprintf(r.Out, "%s %s\n", tui.Success("✓"), fmt.Sprintf("Local model: %s (%s)", r.Model.Name, r.Model.ID))
+		fmt.Fprintf(r.Out, "%s %s\n", status, fmt.Sprintf("Local model: %s (%s)", r.Model.Name, r.Model.ID))
 		// Try to load to show "Model loaded"
 		// Memory safety check before loading
 		hw, _ := hardware.Detect()
@@ -285,7 +286,7 @@ func (r *REPL) printBanner() {
 			err := r.Runtime.Load(ctxLoad, r.Model)
 			cancel()
 			if err == nil {
-				fmt.Fprintf(r.Out, "%s %s\n", tui.Success("✓"), "Model loaded")
+				fmt.Fprintf(r.Out, "%s %s\n", status, "Model loaded")
 				_ = r.Runtime.Unload(context.Background())
 			} else {
 				fmt.Fprintf(r.Out, "%s %s: %v\n", tui.Warning("○"), "Model not loaded", err)
@@ -296,7 +297,7 @@ func (r *REPL) printBanner() {
 		fmt.Fprintf(r.Out, "  %s\n", tui.Muted("Use: apcode models"))
 	}
 	fmt.Fprintln(r.Out)
-	fmt.Fprintln(r.Out, tui.Muted("Type /help for commands."))
+	fmt.Fprintln(r.Out, tui.Muted(fmt.Sprintf("APCode v%s · offline-first · type /help for commands", config.Version)))
 	fmt.Fprintln(r.Out)
 }
 
@@ -329,16 +330,20 @@ func (r *REPL) handleSlashCommand(ctx context.Context, input string) bool {
 }
 
 func (r *REPL) printHelp() {
-	fmt.Fprintln(r.Out, tui.Primary("Available commands:"))
-	fmt.Fprintln(r.Out, "  /help     - show this help")
-	fmt.Fprintln(r.Out, "  /clear    - clear screen")
-	fmt.Fprintln(r.Out, "  /context  - show project context")
-	fmt.Fprintln(r.Out, "  /models   - list models")
-	fmt.Fprintln(r.Out, "  /runtime  - show runtime status")
-	fmt.Fprintln(r.Out, "  /diff     - show git diff")
-	fmt.Fprintln(r.Out, "  /status   - show git status")
-	fmt.Fprintln(r.Out, "  /exit     - exit REPL")
-	fmt.Fprintln(r.Out, "  /quit     - exit REPL")
+	fmt.Fprintln(r.Out, tui.Header("Available commands"))
+	cmds := []struct{ cmd, desc string }{
+		{"/help", "show this help"},
+		{"/clear", "clear screen and redraw banner"},
+		{"/context", "show project context summary"},
+		{"/models", "list local models"},
+		{"/runtime", "show runtime status"},
+		{"/diff", "show git diff"},
+		{"/status", "show git status"},
+		{"/exit", "exit the REPL"},
+	}
+	for _, c := range cmds {
+		fmt.Fprintf(r.Out, "  %s %s\n", tui.Primary(fmt.Sprintf("%-9s", c.cmd)), tui.Muted(c.desc))
+	}
 	fmt.Fprintln(r.Out)
 	fmt.Fprintln(r.Out, tui.Muted("Any other text is sent to the AI agent."))
 }
@@ -516,7 +521,7 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 			fullPrompt = fmt.Sprintf("Project: %s (%d files)\n%s\n\nUser: %s", r.Workspace, len(r.ProjectCtx.Files), historyStr, prompt)
 		}
 		if iter == 0 {
-			fmt.Fprintln(r.Out, tui.Muted("  Thinking..."))
+			fmt.Fprintln(r.Out, tui.Muted("  ⋯ thinking..."))
 		}
 		req := runtime.GenerateRequest{Prompt: fullPrompt, Options: runtime.GenerateOptions{MaxTokens: 512}}
 		resp, err := r.Runtime.Generate(ctx, req)

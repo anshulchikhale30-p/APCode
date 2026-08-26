@@ -139,7 +139,7 @@ func runBenchmark() {
 	profile, _ := hardware.Detect()
 	config := benchmark.DefaultConfig()
 
-	fmt.Fprintln(os.Stdout, tui.Primary("APCode Benchmark"))
+	fmt.Fprintln(os.Stdout, tui.Header("APCode Benchmark"))
 	fmt.Fprintln(os.Stdout)
 
 	runner := &benchmark.BenchmarkRunner{}
@@ -244,8 +244,7 @@ func runModelsInstall(manager *localmodel.Manager, id string) {
 	}
 
 	// Display model info before download
-	fmt.Fprintln(os.Stdout, tui.Primary("Model Installation"))
-	fmt.Fprintln(os.Stdout, tui.Muted("═══════════════════════════════════════"))
+	fmt.Fprintln(os.Stdout, tui.Header("Model Installation"))
 	fmt.Fprintf(os.Stdout, "%s %s\n", tui.Muted("Model:"), tui.Primary(meta.Name+" ("+meta.ID+")"))
 	fmt.Fprintf(os.Stdout, "%s %s\n", tui.Muted("Size:"), formatBytes(meta.FileSizeBytes))
 	fmt.Fprintf(os.Stdout, "%s %s\n", tui.Muted("Runtime:"), formatRuntimes(meta.RuntimeCompatibility))
@@ -419,9 +418,7 @@ func printModelInfo(w *os.File, manager *localmodel.Manager, id string) {
 		os.Exit(1)
 	}
 
-	fmt.Fprintln(w, tui.Primary("Model Information"))
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, tui.Muted("═══════════════════════════════════════"))
+	fmt.Fprintln(w, tui.Header("Model Information"))
 	fmt.Fprintln(w)
 
 	fmt.Fprintf(w, "%s %s\n", tui.Muted("ID:"), tui.Primary(metadata.ID))
@@ -527,9 +524,7 @@ func joinWithComma(items []string) string {
 }
 
 func printBenchmarkResult(w *os.File, result benchmark.Result) {
-	fmt.Fprintln(w, tui.Muted("═══════════════════════════════════════"))
-	fmt.Fprintln(w, tui.Muted("Benchmark Results"))
-	fmt.Fprintln(w, tui.Muted("═══════════════════════════════════════"))
+	fmt.Fprintln(w, tui.Header("Benchmark Results"))
 	fmt.Fprintln(w)
 
 	// CPU
@@ -766,7 +761,7 @@ func runRecommend(args []string) {
 			fmt.Fprintln(os.Stderr, "\nCancelling benchmark...")
 		}()
 
-		fmt.Fprintln(os.Stdout, tui.Primary("APCode Benchmark"))
+		fmt.Fprintln(os.Stdout, tui.Header("APCode Benchmark"))
 		fmt.Fprintln(os.Stdout)
 
 		benchConfig := benchmark.DefaultConfig()
@@ -880,7 +875,7 @@ func runRuntime(args []string) {
 	runtimeInstalled := rt != nil && runtime.IsAvailable(ctx, rt)
 	modelInstalled := hasModel
 
-	fmt.Fprintln(os.Stdout, tui.Primary("APCode Runtime"))
+	fmt.Fprintln(os.Stdout, tui.Header("APCode Runtime"))
 	fmt.Fprintln(os.Stdout)
 
 	if runtimeInstalled {
@@ -987,7 +982,7 @@ func runInfer(args []string) {
 	session := cli.ResolveSession()
 	rt := session.Runtime
 	if rt == nil {
-		fmt.Fprintln(os.Stdout, tui.Primary("APCode Runtime"))
+		fmt.Fprintln(os.Stdout, tui.Header("APCode Runtime"))
 		fmt.Fprintln(os.Stdout)
 		fmt.Fprintf(os.Stdout, "%s %s\n", tui.Muted("Runtime:"), tui.Warning("not installed"))
 		fmt.Fprintf(os.Stdout, "%s %s\n", tui.Muted("Model:"), tui.Warning("not installed"))
@@ -1044,7 +1039,7 @@ func runInfer(args []string) {
 		meta = m
 	} else {
 		if session.Model == nil {
-			fmt.Fprintln(os.Stdout, tui.Primary("APCode Runtime"))
+			fmt.Fprintln(os.Stdout, tui.Header("APCode Runtime"))
 			fmt.Fprintln(os.Stdout)
 			st, _ := rt.Status(ctx)
 			if st.Available {

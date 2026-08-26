@@ -8,6 +8,8 @@ import (
 // ANSI SGR escape sequences used by the APCode palette.
 const (
 	ansiReset     = "\x1b[0m"
+	ansiBold      = "\x1b[1m"
+	ansiUnderline = "\x1b[4m"
 	ansiPrimary   = "\x1b[96m" // bright cyan
 	ansiSecondary = "\x1b[36m" // cyan
 	ansiSuccess   = "\x1b[32m" // green
@@ -85,6 +87,12 @@ func Error(s string) string { return style(ansiError, s) }
 
 // Muted styles text in a subdued color for labels and auxiliary output.
 func Muted(s string) string { return style(ansiMuted, s) }
+
+// Bold styles text in bold.
+func Bold(s string) string { return style(ansiBold, s) }
+
+// Underline styles text underlined.
+func Underline(s string) string { return style(ansiUnderline, s) }
 
 // Reset terminates any active styling.
 func Reset() string {

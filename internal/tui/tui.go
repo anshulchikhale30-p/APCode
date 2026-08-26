@@ -39,49 +39,52 @@ func PrintWelcome(w io.Writer, profile hardware.HardwareProfile) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, Muted(tagline))
 	fmt.Fprintln(w)
-	printHardwareProfile(w, profile)
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "%s %s\n", Muted("APCode version   :"), config.Version)
-	fmt.Fprintf(w, "%s %s\n", Muted("Offline mode     :"), Success("enabled"))
+	fmt.Fprintln(w, Box("System", append(hardwareProfileLines(profile),
+		fmt.Sprintf("%s %s", Muted("APCode version   :"), config.Version),
+		fmt.Sprintf("%s %s", Muted("Offline mode     :"), Success("enabled")),
+	)))
 }
 
-// printHardwareProfile renders the hardware profile panel.
-func printHardwareProfile(w io.Writer, p hardware.HardwareProfile) {
-	fmt.Fprintf(w, "%s %s\n", Muted("Operating system :"), p.OS)
-	fmt.Fprintf(w, "%s %s\n", Muted("CPU architecture :"), p.Arch)
-	fmt.Fprintf(w, "%s %d", Muted("CPU threads      :"), p.LogicalCPUs)
+// hardwareProfileLines renders the hardware profile as styled lines.
+func hardwareProfileLines(p hardware.HardwareProfile) []string {
+	var lines []string
+
+	cpu := fmt.Sprintf("%s %d", Muted("CPU threads      :"), p.LogicalCPUs)
 	if p.PhysicalCoresKnown {
-		fmt.Fprintf(w, " (%d physical)", p.PhysicalCores)
+		cpu += fmt.Sprintf(" (%d physical)", p.PhysicalCores)
 	}
-	fmt.Fprintln(w)
+	lines = append(lines,
+		fmt.Sprintf("%s %s", Muted("Operating system :"), p.OS),
+		fmt.Sprintf("%s %s", Muted("CPU architecture :"), p.Arch),
+		cpu,
+	)
 
 	if p.TotalRAMBytes > 0 {
-		fmt.Fprintf(w, "%s %s", Muted("Total RAM        :"), formatBytes(p.TotalRAMBytes))
+		ram := fmt.Sprintf("%s %s", Muted("Total RAM        :"), formatBytes(p.TotalRAMBytes))
 		if p.AvailableRAMKnown && p.AvailableRAMBytes > 0 {
-			fmt.Fprintf(w, " (avail %s)", formatBytes(p.AvailableRAMBytes))
+			ram += fmt.Sprintf(" (avail %s)", formatBytes(p.AvailableRAMBytes))
 		}
-		fmt.Fprintln(w)
+		lines = append(lines, ram)
 	}
 
 	if p.GPU.Known {
-		fmt.Fprintf(w, "%s %s", Muted("GPU              :"), p.GPU.Name)
+		gpu := fmt.Sprintf("%s %s", Muted("GPU              :"), p.GPU.Name)
 		if p.GPU.Vendor != "" {
-			fmt.Fprintf(w, " (%s)", p.GPU.Vendor)
+			gpu += fmt.Sprintf(" (%s)", p.GPU.Vendor)
 		}
 		if p.GPU.VRAMKnown && p.GPU.VRAMBytes > 0 {
-			fmt.Fprintf(w, " - %s VRAM", formatBytes(p.GPU.VRAMBytes))
+			gpu += fmt.Sprintf(" - %s VRAM", formatBytes(p.GPU.VRAMBytes))
 		}
-		fmt.Fprintln(w)
+		lines = append(lines, gpu)
 	} else {
-		fmt.Fprintf(w, "%s %s\n", Muted("GPU              :"), "unknown")
+		lines = append(lines, fmt.Sprintf("%s %s", Muted("GPU              :"), "unknown"))
 	}
 
-	if len(p.DetectionErrors) > 0 {
-		fmt.Fprintln(w)
-		for _, err := range p.DetectionErrors {
-			fmt.Fprintf(w, "%s %s\n", Warning("⚠"), Muted(err))
-		}
+	for _, err := range p.DetectionErrors {
+		lines = append(lines, fmt.Sprintf("%s %s", Warning("⚠"), Muted(err)))
 	}
+
+	return lines
 }
 
 // formatBytes formats a byte count as a human-readable string with
@@ -137,19 +140,23 @@ func RenderProgressBar(w io.Writer, pb ProgressBar) {
 	}
 
 	label := Muted(fmt.Sprintf("%-10s", pb.Label))
+	if pb.Status == "running" {
+		pct := int(pb.Progress*100 + 0.5)
+		fmt.Fprintf(w, "%s %s %3d%%  %s\n", label, bar, pct, pb.StatusColor(pb.Status))
+		return
+	}
 	fmt.Fprintf(w, "%s %s  %s\n", label, bar, pb.StatusColor(pb.Status))
 }
 
 // PrintBenchmarkProgress prints the benchmark progress header.
 func PrintBenchmarkProgress(w io.Writer) {
-	fmt.Fprintln(w, Primary("APCode Benchmark"))
+	fmt.Fprintln(w, Header("APCode Benchmark"))
 	fmt.Fprintln(w)
 }
 
 // PrintRecommendation renders the model recommendation results.
 func PrintRecommendation(w io.Writer, result recommendation.RecommendationResult) {
-	fmt.Fprintln(w, Primary("APCode Model Recommendation"))
-	fmt.Fprintln(w, Muted("═══════════════════════════════════════"))
+	fmt.Fprintln(w, Header("APCode Model Recommendation"))
 	fmt.Fprintln(w)
 
 	// Recommended model
@@ -191,7 +198,7 @@ func PrintRecommendation(w io.Writer, result recommendation.RecommendationResult
 	}
 
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, Muted("────────────────────────────────────────"))
+	fmt.Fprintln(w, Rule())
 	fmt.Fprintln(w)
 
 	// Other candidates
@@ -236,7 +243,7 @@ func PrintRecommendation(w io.Writer, result recommendation.RecommendationResult
 
 	// Uncertainty
 	if result.Uncertainty != "" && result.Uncertainty != "No significant uncertainties" {
-		fmt.Fprintln(w, Muted("────────────────────────────────────────"))
+		fmt.Fprintln(w, Rule())
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, Primary("Uncertainty:"))
 		fmt.Fprintf(w, "  %s\n", Warning(result.Uncertainty))
@@ -300,8 +307,7 @@ func joinWithComma(items []string) string {
 
 // PrintContext renders project context discovery results.
 func PrintContext(w io.Writer, result *projectcontext.Result) {
-	fmt.Fprintln(w, Primary("APCode Project Context"))
-	fmt.Fprintln(w, Muted("═══════════════════════════════════════"))
+	fmt.Fprintln(w, Header("APCode Project Context"))
 	fmt.Fprintln(w)
 
 	// Project root
@@ -400,8 +406,7 @@ func PrintContext(w io.Writer, result *projectcontext.Result) {
 
 // PrintSearchResults renders codeintel search results.
 func PrintSearchResults(w io.Writer, query, dir string, symbols []codeintel.Symbol, results []codeintel.SearchResult, idx *codeintel.Index) {
-	fmt.Fprintln(w, Primary("APCode Search"))
-	fmt.Fprintln(w, Muted("═══════════════════════════════════════"))
+	fmt.Fprintln(w, Header("APCode Search"))
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "%s %q\n", Muted("Query:"), Primary(query))
 	fmt.Fprintf(w, "%s %s\n", Muted("Directory:"), dir)
