@@ -257,6 +257,42 @@ Everything runs locally. No cloud APIs, no data leaving your machine.
 
 ---
 
+## AI Coding Agent
+
+APCode is evolving from a local-LLM REPL into a real terminal coding agent: an iterative loop where the model inspects the project, plans, edits via tools with your approval, and validates its own changes. All offline.
+
+| Capability | Status |
+|---|---|
+| Agent loop (plan → act → observe → repeat), iteration caps | **IMPLEMENTED** |
+| Tool system with JSON schemas + structured errors (16 tools) | **IMPLEMENTED** |
+| `read_file` `list_files` `search_files` `write_file` `edit_file` | **IMPLEMENTED** |
+| `create_file` (no-clobber) · `delete_file` (approval-gated) · `apply_patch` (unified diff w/ context validation) | **IMPLEMENTED** |
+| `project_info` · `run_tests` / `run_build` / `run_lint` (stack auto-detect: Go/Node/Python/Rust) | **IMPLEMENTED** |
+| Path security: workspace jail, traversal rejection, symlink escape protection | **IMPLEMENTED** |
+| Command classifier: SAFE (auto) / REQUIRES_APPROVAL / BLOCKED | **IMPLEMENTED** |
+| Write/delete approval prompts; safe reads automatic | **IMPLEMENTED** |
+| Rollback journal (`/rollback` restores last change set) | **IMPLEMENTED** |
+| Git awareness (`git_status`, `git_diff`, never auto-commits) | **IMPLEMENTED** |
+| Validation after changes + bounded repair loop | **IMPLEMENTED** (repair capped at 2 attempts) |
+| REPL commands `/files /search /model /plan /compact /permissions /rollback /git` | **IMPLEMENTED** |
+| Context compaction (`/compact`, keeps task anchor + recent turns) | **IMPLEMENTED** (truncate-style summary) |
+| Model provider abstraction (`internal/provider`) over native Gemma / llama.cpp / Ollama / mock | **IMPLEMENTED** |
+| Structured model output parsing (JSON object/array/fenced/tool-marker formats) | **IMPLEMENTED** |
+| Streaming into TUI | **PARTIALLY IMPLEMENTED** (streaming supported in runtime/provider & `apcode run --stream`; REPL still uses non-streaming generate) |
+| Automatic plan revision mid-task | **PLANNED** |
+| Diff preview of *proposed multi-file* change sets before any apply | **PLANNED** (single-edit previews work today) |
+| Prompt-injection hardening for untrusted file content | **PARTIALLY IMPLEMENTED** (repo files are data-only in prompts; no sanitizer layer yet) |
+| Secrets redaction in tool output | **PLANNED** |
+
+### Security policy
+
+- The agent can only touch files inside the project root. Absolute paths, `..` traversal, and symlink escapes are rejected.
+- Terminal commands are classified: read-only/validation commands run automatically; anything else requires `[y/N]`; system-destructive commands are refused even with approval.
+- Deletes always require approval. APCode never runs `git commit` or `git push`.
+- Every write/edit/delete is journaled; `/rollback` reverts the most recent APCode change set exactly.
+
+---
+
 ## Current Capabilities
 
 - `apcode --version` / `apcode version` — print version (both work, single source `internal/config.Version`)
@@ -280,8 +316,9 @@ Everything runs locally. No cloud APIs, no data leaving your machine.
 ```
 cmd/apcode/        CLI entry point (welcome, benchmark, models, recommend, context, search, runtime, infer, REPL)
 internal/
-    cli/           interactive REPL, slash commands, ProjectContext, conversation history
+    cli/           interactive REPL, slash commands, ProjectContext, conversation history, rollback journal
     agent/         agent loop (plan → act → verify)
+    provider/      model provider abstraction over runtimes
     benchmark/     real hardware measurement (CPU/memory/storage)
     codeintel/     symbol extraction, search, imports
     config/        version and app constants (ldflags-overridable)

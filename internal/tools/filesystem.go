@@ -338,13 +338,19 @@ func (t *RunCommandTool) Execute(ctx context.Context, in Input) (Result, error) 
 	if cmdStr == "" {
 		return Result{}, NewToolError(CodeInvalidInput, "RunCommand: missing required argument 'command'", nil)
 	}
-	// Safety: destructive commands require explicit confirmation
-	if err := checkDestructiveCommand(cmdStr, in["args"], in["confirm"]); err != nil {
+	argsStr := strings.TrimSpace(in["args"])
+	// Three-tier security classification. Blocked commands are refused even
+	// with confirmation; anything not on the safe list requires approval.
+	class := ClassifyCommand(cmdStr + " " + argsStr)
+	if class == ClassBlocked {
+		return Result{}, NewToolError(CodePermission, fmt.Sprintf("command %q is BLOCKED by APCode security policy (system-destructive) and will never be executed", cmdStr), nil)
+	}
+	// Safety: destructive / non-safe commands require explicit confirmation
+	if err := checkDestructiveCommand(cmdStr, argsStr, in["confirm"]); err != nil {
 		return Result{}, err
 	}
 	// Parse command: if command contains spaces and no args provided, split.
 	command := cmdStr
-	argsStr := strings.TrimSpace(in["args"])
 	var args []string
 	if argsStr != "" {
 		// Simple split respecting quotes? Use naive fields for now, but handle quotes.
@@ -516,36 +522,18 @@ func splitArgs(s string) []string {
 	return args
 }
 
-// checkDestructiveCommand rejects dangerous operations without explicit confirmation.
+// checkDestructiveCommand enforces the approval tier of the command
+// classifier: commands that are not ClassSafe require explicit confirmation.
 func checkDestructiveCommand(command, argsStr, confirm string) error {
-	lowerCmd := strings.ToLower(strings.TrimSpace(command))
-	lowerArgs := strings.ToLower(strings.TrimSpace(argsStr))
-	combined := lowerCmd + " " + lowerArgs
+	combined := strings.Join(strings.Fields(strings.TrimSpace(command+" "+argsStr)), " ")
 	// Normalize confirm flag
-	confirmed := strings.ToLower(strings.TrimSpace(confirm)) == "true" || strings.ToLower(strings.TrimSpace(confirm)) == "1" || strings.ToLower(strings.TrimSpace(confirm)) == "yes"
+	confirmed := strings.EqualFold(strings.TrimSpace(confirm), "true") || strings.EqualFold(strings.TrimSpace(confirm), "1") || strings.EqualFold(strings.TrimSpace(confirm), "yes")
 	if confirmed {
 		return nil
 	}
-	destructive := []string{
-		"rm -rf",
-		"rm -r",
-		"git reset --hard",
-		"git clean",
-		"git push --force",
-		"git push -f",
-		"force push",
-		"mkfs",
-		"format c:",
-		"del /f",
-		"rmdir /s",
+	if ClassifyCommand(combined) != ClassSafe {
+		return NewToolError(CodePermission, fmt.Sprintf("command %q requires approval: it is not on the safe list (class %s). Add confirm=true after user approval", combined, ClassifyCommand(combined)), nil)
 	}
-	for _, pat := range destructive {
-		if strings.Contains(combined, pat) {
-			return NewToolError(CodePermission, fmt.Sprintf("destructive command %q requires confirmation: add confirm=true to input", combined), nil)
-		}
-	}
-	// Also check for secrets in args (never expose, but reject if trying to cat .env with secrets?)
-	// We don't block cat, but we ensure output truncation; secrets not leaked via tool error messages.
 	return nil
 }
 

@@ -139,18 +139,25 @@ func TestRegistryAndDefault(t *testing.T) {
 	if err := r.Register(NewReadFileTool(ws)); err == nil {
 		t.Error("duplicate register should fail")
 	}
-	// DefaultRegistry
+	// DefaultRegistry (9 base tools + 7 extended: create_file, delete_file,
+	// apply_patch, project_info, run_tests, run_build, run_lint)
 	dr := DefaultRegistry()
-	if dr.Count() != 9 {
-		t.Errorf("DefaultRegistry count = %d, want 9", dr.Count())
+	if dr.Count() != 16 {
+		t.Errorf("DefaultRegistry count = %d, want 16", dr.Count())
 	}
 	// DefaultRegistryWithWorkspace
 	dr2, err := DefaultRegistryWithWorkspace(ws)
 	if err != nil {
 		t.Fatalf("DefaultRegistryWithWorkspace: %v", err)
 	}
-	if dr2.Count() != 9 {
-		t.Errorf("DefaultRegistryWithWorkspace count = %d, want 9", dr2.Count())
+	if dr2.Count() != 16 {
+		t.Errorf("DefaultRegistryWithWorkspace count = %d, want 16", dr2.Count())
+	}
+	// Extended tools are present
+	for _, name := range []string{"create_file", "delete_file", "apply_patch", "project_info", "run_tests", "run_build", "run_lint"} {
+		if _, ok := dr2.Get(name); !ok {
+			t.Errorf("extended tool %q not registered", name)
+		}
 	}
 	// DefinitionsForPrompt non-empty
 	if s := dr.DefinitionsForPrompt(); !strings.Contains(s, "Available tools") {
@@ -785,7 +792,7 @@ func TestRunCommandOutputLimit(t *testing.T) {
 	// We'll create a temp Go program that prints large output and run it via "go run"
 	prog := `package main; import "fmt"; func main(){ for i:=0;i<10000;i++{ fmt.Println("abcdefghijklmnopqrstuvwxyz 1234567890") } }`
 	writeFile(t, ws, "gen.go", prog)
-	res, err := tool.Execute(context.Background(), Input{"command": "go", "args": "run gen.go"})
+	res, err := tool.Execute(context.Background(), Input{"command": "go", "args": "run gen.go", "confirm": "true"})
 	if err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
@@ -805,7 +812,7 @@ func TestRunCommandTimeout(t *testing.T) {
 	// We can use a Go program that sleeps
 	prog := `package main; import "time"; func main(){ time.Sleep(2*time.Second) }`
 	writeFile(t, ws, "sleep.go", prog)
-	res, err := tool.Execute(context.Background(), Input{"command": "go", "args": "run sleep.go", "timeout": "100ms"})
+	res, err := tool.Execute(context.Background(), Input{"command": "go", "args": "run sleep.go", "timeout": "100ms", "confirm": "true"})
 	if err != nil {
 		t.Fatalf("transport error: %v", err)
 	}
@@ -832,7 +839,7 @@ func TestRunCommandCancellation(t *testing.T) {
 	}()
 	prog := `package main; import "time"; func main(){ time.Sleep(2*time.Second) }`
 	writeFile(t, ws, "sleep2.go", prog)
-	_, err := tool.Execute(ctx, Input{"command": "go", "args": "run sleep2.go"})
+	_, err := tool.Execute(ctx, Input{"command": "go", "args": "run sleep2.go", "confirm": "true"})
 	if err == nil {
 		t.Fatal("expected cancellation error")
 	}
@@ -849,7 +856,7 @@ func TestRunCommandCaptureStderr(t *testing.T) {
 	ws := tempWorkspace(t)
 	tool := NewRunCommandTool(ws)
 	// Run go with bad args to produce stderr
-	res, err := tool.Execute(context.Background(), Input{"command": "go", "args": "badcommand123"})
+	res, err := tool.Execute(context.Background(), Input{"command": "go", "args": "badcommand123", "confirm": "true"})
 	if err != nil {
 		t.Fatalf("transport error: %v", err)
 	}

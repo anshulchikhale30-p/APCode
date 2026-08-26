@@ -40,7 +40,9 @@ type REPL struct {
 	ModelDir    string
 	Registry    *tools.Registry
 	History     []Message
+	Journal     *Journal
 	NoColor     bool
+	lastPlan    string
 	reader      *bufio.Reader
 }
 
@@ -116,6 +118,11 @@ func NewREPL(in io.Reader, out, errOut io.Writer) (*REPL, error) {
 	}
 	tools.RegisterSpecTools(reg, absWs)
 
+	journal := NewJournal()
+	if wrapped, werr := wrapRegistryWithJournal(reg, absWs, journal); werr == nil {
+		reg = wrapped
+	}
+
 	return &REPL{
 		In:          in,
 		Out:         out,
@@ -131,6 +138,7 @@ func NewREPL(in io.Reader, out, errOut io.Writer) (*REPL, error) {
 		ModelDir:    modelDir,
 		Registry:    reg,
 		History:     []Message{},
+		Journal:     journal,
 		reader:      bufio.NewReader(in),
 	}, nil
 }
@@ -198,6 +206,7 @@ func (r *REPL) Run(ctx context.Context) error {
 				continue
 			}
 			r.History = append(r.History, Message{Role: "user", Content: input})
+			r.Journal.BeginGroup()
 			agentCtx, cancel := context.WithCancel(ctx)
 			go func() {
 				select {
@@ -213,6 +222,7 @@ func (r *REPL) Run(ctx context.Context) error {
 			}()
 			response, err := r.runAgent(agentCtx, input)
 			cancel()
+			r.Journal.EndGroup()
 			if err != nil {
 				if err == context.Canceled {
 					fmt.Fprintln(r.Out, tui.Muted("Cancelled."))
@@ -313,14 +323,31 @@ func (r *REPL) handleSlashCommand(ctx context.Context, input string) bool {
 		r.printBanner()
 	case "/context", "/ctx":
 		r.handleContext()
-	case "/models", "/model":
+	case "/models":
 		r.handleModels()
 	case "/runtime", "/rt":
 		r.handleRuntime()
 	case "/diff":
 		r.handleDiff(ctx)
+	case "/git":
+		r.handleDiff(ctx)
+		r.handleStatus()
 	case "/status", "/st":
 		r.handleStatus()
+	case "/files":
+		r.handleFiles()
+	case "/search":
+		r.handleSearch(ctx, input)
+	case "/model":
+		r.handleModel()
+	case "/plan":
+		r.handlePlan()
+	case "/compact":
+		r.handleCompact()
+	case "/permissions":
+		r.handlePermissions()
+	case "/rollback":
+		r.handleRollback()
 	case "/exit", "/quit", "/q":
 		return true
 	default:
@@ -335,10 +362,18 @@ func (r *REPL) printHelp() {
 		{"/help", "show this help"},
 		{"/clear", "clear screen and redraw banner"},
 		{"/context", "show project context summary"},
+		{"/files [dir]", "list files via the agent's file tool"},
+		{"/search <query>", "search files in the workspace"},
 		{"/models", "list local models"},
+		{"/model", "show the currently selected model"},
 		{"/runtime", "show runtime status"},
+		{"/plan", "show the plan from the current/last task"},
+		{"/compact", "compact conversation history"},
+		{"/permissions", "show the tool permission policy"},
+		{"/git", "show git diff + status"},
 		{"/diff", "show git diff"},
 		{"/status", "show git status"},
+		{"/rollback", "revert the last APCode change set"},
 		{"/exit", "exit the REPL"},
 	}
 	for _, c := range cmds {
@@ -494,6 +529,16 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 	defer func() { _ = r.Runtime.Unload(context.Background()) }()
 
 	const maxIter = 10
+	const maxRepairAttempts = 2
+	modified := false
+	repairAttempts := 0
+	planEmitted := false
+	// The agent system prompt: instructs the model to behave like a software
+	// engineer — inspect before modifying, prefer tools, minimal changes.
+	systemPrompt := "You are APCode, an offline AI coding agent working inside the user's project. " +
+		"Rules: inspect before modifying; use tools instead of guessing; make minimal changes that preserve existing architecture; " +
+		"avoid unrelated changes; validate changes by running tests when available; never claim success without verification. " +
+		"To act, respond with JSON: {\"tool\":\"<name>\",\"input\":{...}}. To finish, respond with plain text only."
 	for iter := 0; iter < maxIter; iter++ {
 		historyStr := ""
 		if len(r.History) > 0 {
@@ -520,6 +565,7 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 		if r.ProjectCtx != nil && len(r.ProjectCtx.Files) > 0 && iter == 0 {
 			fullPrompt = fmt.Sprintf("Project: %s (%d files)\n%s\n\nUser: %s", r.Workspace, len(r.ProjectCtx.Files), historyStr, prompt)
 		}
+		fullPrompt = systemPrompt + "\n\n" + fullPrompt
 		if iter == 0 {
 			fmt.Fprintln(r.Out, tui.Muted("  ⋯ thinking..."))
 		}
@@ -535,26 +581,100 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 		if text == "" {
 			text = "(no response)"
 		}
+		if plan := extractPlan(text); plan != "" {
+			r.lastPlan = plan
+			fmt.Fprintf(r.Out, "%s\n%s\n", tui.Primary("Plan:"), r.lastPlan)
+		}
 		r.History = append(r.History, Message{Role: "assistant", Content: text})
 		toolCalls, answer, _ := parseToolCalls(text)
 		if len(toolCalls) == 0 {
+			// A plan without tool calls is an intermediate step: acknowledge
+			// it and let the agent proceed to act. Only the first plan is
+			// echoed; later plan-like answers are treated as final so that
+			// genuinely textual replies still terminate the loop.
+			if plan := extractPlan(text); plan != "" && !planEmitted && !modified {
+				planEmitted = true
+				r.History = append(r.History, Message{
+					Role:    "system",
+					Content: "Plan acknowledged. Proceed step by step using tools.",
+				})
+				continue
+			}
 			if answer != "" {
 				text = answer
+			}
+			// Validation loop: if files were changed in this task, run the
+			// detected test command once before accepting success. On
+			// failure, feed the failure back and let the model repair,
+			// bounded by maxRepairAttempts.
+			if modified && repairAttempts < maxRepairAttempts {
+				repairAttempts++
+				fmt.Fprintln(r.Out, tui.Muted("  Running validation..."))
+				vres, verr := r.Registry.Execute(ctx, "run_tests", tools.Input{})
+				if tools.IsToolError(verrOr(vres.Err, verr), tools.CodeNotFound) {
+					fmt.Fprintln(r.Out, tui.Muted("  No test command detected for this project; skipping validation."))
+					return text, nil
+				}
+				var vout string
+				failed := false
+				if verr != nil || (vres.Err != nil) {
+					failed = true
+					vout = fmt.Sprintf("validation error: %v", verrOr(vres.Err, verr))
+				} else {
+					vout = vres.Output
+					failed = vres.Err != nil
+				}
+				if failed {
+					fmt.Fprintf(r.Out, "%s\n", tui.Error("✗ Validation failed"))
+					fmt.Fprintf(r.Out, "%s\n", tui.Muted("  Investigating failure..."))
+					r.History = append(r.History, Message{
+						Role:    "tool_result",
+						Content: "Validation (run_tests) FAILED. Output:\n" + truncateForHistory(vout, 2000) + "\nInvestigate the failure, fix the code with tools, then run run_tests again.",
+					})
+					continue
+				}
+				fmt.Fprintf(r.Out, "%s\n", tui.Success("✓ Tests passed"))
 			}
 			return text, nil
 		}
 		for _, tc := range toolCalls {
 			fmt.Fprintf(r.Out, "%s %s %s\n", tui.Muted("  Tool:"), tc.Name, fmt.Sprintf("%v", tc.Input))
-			if tc.Name == "write_file" || tc.Name == "WriteFile" {
-				path := tc.Input["path"]
-				content := tc.Input["content"]
-				fmt.Fprintf(r.Out, "\n%s wants to modify:\n\n%s\n\n", tui.Primary("APCode"), tui.Warning(path))
-				preview := content
-				if len(preview) > 500 {
-					preview = preview[:500] + "..."
+			// Unified approval policy: reads are automatic; file writes,
+			// deletes, patches, and non-safe terminal commands require an
+			// explicit [y/N] confirmation.
+			if requiresUserApproval(tc.Name, tc.Input) {
+				n := normalizeToolName(tc.Name)
+				switch {
+				case n == "runcommand" || n == "shell":
+					fullCmd := strings.TrimSpace(tc.Input["command"] + " " + tc.Input["args"])
+					class := tools.ClassifyCommand(fullCmd)
+					label := "wants to run"
+					if class == tools.ClassBlocked {
+						label = "BLOCKED command (refused by security policy)"
+					}
+					fmt.Fprintf(r.Out, "\n%s %s:\n\n%s\n\n", tui.Warning("APCode"), label, fullCmd)
+					fmt.Fprint(r.Out, "Allow? [y/N] ")
+				case n == "deletefile":
+					path := tc.Input["path"]
+					fmt.Fprintf(r.Out, "\n%s wants to DELETE:\n\n%s\n\n", tui.Warning("APCode"), path)
+					fmt.Fprint(r.Out, "Approve deletion? [y/N] ")
+				default:
+					path := tc.Input["path"]
+					content := tc.Input["content"]
+					patch := tc.Input["patch"]
+					fmt.Fprintf(r.Out, "\n%s wants to modify:\n\n%s\n\n", tui.Primary("APCode"), tui.Warning(path))
+					preview := content
+					if preview == "" {
+						preview = patch
+					}
+					if len(preview) > 500 {
+						preview = preview[:500] + "..."
+					}
+					if preview != "" {
+						fmt.Fprintln(r.Out, preview)
+					}
+					fmt.Fprint(r.Out, "\nApply this change? [y/N] ")
 				}
-				fmt.Fprintln(r.Out, preview)
-				fmt.Fprint(r.Out, "\nApply this change? [y/N] ")
 				if r.reader == nil {
 					r.reader = bufio.NewReader(r.In)
 				}
@@ -565,35 +685,8 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 					r.History = append(r.History, Message{Role: "tool_result", Content: "Tool " + tc.Name + " cancelled by user"})
 					continue
 				}
-			} else if tc.Name == "shell" || tc.Name == "RunCommand" {
-				cmd := tc.Input["command"]
-				args := tc.Input["args"]
-				fullCmd := cmd + " " + args
-				dangerous := isDangerousCommand(fullCmd)
-				if dangerous {
-					fmt.Fprintf(r.Out, "\n%s wants to run dangerous command:\n\n%s\n\n", tui.Warning("APCode"), fullCmd)
-					fmt.Fprint(r.Out, "Allow? [y/N] ")
-					if r.reader == nil {
-						r.reader = bufio.NewReader(r.In)
-					}
-					confirm, _ := r.reader.ReadString('\n')
-					confirm = strings.ToLower(strings.TrimSpace(confirm))
-					if confirm != "y" && confirm != "yes" {
-						r.History = append(r.History, Message{Role: "tool_result", Content: "Command cancelled by user"})
-						continue
-					}
-				} else {
-					fmt.Fprintf(r.Out, "\n%s wants to run:\n\n%s\n\n", tui.Muted("  Running:"), fullCmd)
-					fmt.Fprint(r.Out, "Run? [y/N] ")
-					if r.reader == nil {
-						r.reader = bufio.NewReader(r.In)
-					}
-					confirm, _ := r.reader.ReadString('\n')
-					confirm = strings.ToLower(strings.TrimSpace(confirm))
-					if confirm != "y" && confirm != "yes" {
-						r.History = append(r.History, Message{Role: "tool_result", Content: "Command cancelled"})
-						continue
-					}
+				if normalizeToolName(tc.Name) == "runcommand" || normalizeToolName(tc.Name) == "shell" {
+					tc.Input["confirm"] = "true"
 				}
 			}
 			fmt.Fprintf(r.Out, "%s %s...\n", tui.Muted("  Executing:"), tc.Name)
@@ -613,6 +706,9 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 				if out == "" {
 					out = "(no output)"
 				}
+				if isModifyingTool(tc.Name) {
+					modified = true
+				}
 			}
 			preview := out
 			if len(preview) > 200 {
@@ -628,15 +724,51 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 	return "(no response)", nil
 }
 
-func isDangerousCommand(cmd string) bool {
-	lower := strings.ToLower(cmd)
-	dangerous := []string{"rm ", "del ", "rmdir", "format", "git reset --hard", "git clean", "mkfs"}
-	for _, pat := range dangerous {
-		if strings.Contains(lower, pat) {
-			return true
+// extractPlan captures a numbered plan (3+ numbered steps or a "Plan:"
+// heading followed by numbered steps) from assistant output.
+func extractPlan(text string) string {
+	lines := strings.Split(text, "\n")
+	var planLines []string
+	inPlan := false
+	for _, l := range lines {
+		t := strings.TrimSpace(l)
+		lower := strings.ToLower(t)
+		if strings.HasPrefix(lower, "plan:") || strings.HasPrefix(lower, "plan :") {
+			inPlan = true
+			planLines = append(planLines[:0], l)
+			continue
+		}
+		isNumbered := len(t) > 2 && (t[0] >= '1' && t[0] <= '9') && (t[1] == '.' || t[1] == ')')
+		if isNumbered {
+			if !inPlan {
+				inPlan = true
+				planLines = nil
+			}
+			planLines = append(planLines, l)
+		} else if inPlan {
+			break
 		}
 	}
-	return false
+	if len(planLines) >= 3 {
+		return strings.TrimRight(strings.Join(planLines, "\n"), "\n")
+	}
+	return ""
+}
+
+// verrOr returns whichever error is non-nil.
+func verrOr(a, b error) error {
+	if a != nil {
+		return a
+	}
+	return b
+}
+
+// truncateForHistory limits a string for inclusion in conversation history.
+func truncateForHistory(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "\n...[truncated]"
 }
 
 func parseToolCalls(text string) ([]struct {
@@ -755,4 +887,140 @@ func formatBytes(bytes uint64) string {
 
 func init() {
 	_ = config.Version
+}
+
+// ---- agent-facing slash commands ----
+
+// handleFiles lists files using the registry's file listing tool.
+func (r *REPL) handleFiles() {
+	dir := "."
+	tool, ok := r.Registry.Get("list_files")
+	if !ok {
+		tool, ok = r.Registry.Get("ListDirectory")
+	}
+	if !ok {
+		fmt.Fprintln(r.ErrOut, "file listing tool not available")
+		return
+	}
+	res, err := tool.Execute(context.Background(), tools.Input{"path": dir})
+	if err != nil || res.Err != nil {
+		fmt.Fprintf(r.ErrOut, "list failed: %v\n", verrOr(res.Err, err))
+		return
+	}
+	fmt.Fprintln(r.Out, tui.Header("Files"))
+	fmt.Fprintln(r.Out, res.Output)
+}
+
+// handleSearch runs a workspace search through the registry.
+func (r *REPL) handleSearch(ctx context.Context, input string) {
+	query := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(input), "/search"))
+	if query == "" {
+		fmt.Fprintln(r.Out, tui.Muted("usage: /search <query>"))
+		return
+	}
+	tool, ok := r.Registry.Get("search")
+	if !ok {
+		tool, ok = r.Registry.Get("SearchFiles")
+	}
+	if !ok {
+		fmt.Fprintln(r.ErrOut, "search tool not available")
+		return
+	}
+	res, err := tool.Execute(ctx, tools.Input{"query": query})
+	if err != nil {
+		fmt.Fprintf(r.ErrOut, "search error: %v\n", err)
+		return
+	}
+	if res.Err != nil {
+		fmt.Fprintf(r.Out, "%s %v\n", tui.Warning("Search:"), res.Err)
+		return
+	}
+	out := res.Output
+	if strings.TrimSpace(out) == "" {
+		out = "(no results)"
+	}
+	fmt.Fprintf(r.Out, "%s %s\n", tui.Header("Search"), tui.Muted(query))
+	fmt.Fprintln(r.Out, out)
+}
+
+// handleModel shows the currently selected model.
+func (r *REPL) handleModel() {
+	if r.Model == nil {
+		fmt.Fprintln(r.Out, tui.Warning("No local model selected."))
+		fmt.Fprintln(r.Out, tui.Muted("Use /models to list and `apcode models install <id>` to install."))
+		return
+	}
+	rt := r.RuntimeName
+	if rt == "" && r.Runtime != nil {
+		rt = string(r.Runtime.Type())
+	}
+	fmt.Fprintln(r.Out, tui.Box("Model", []string{
+		fmt.Sprintf("%s %s", tui.Muted("ID      :"), r.Model.ID),
+		fmt.Sprintf("%s %s", tui.Muted("Name    :"), r.Model.Name),
+		fmt.Sprintf("%s %s", tui.Muted("Runtime :"), rt),
+	}))
+}
+
+// handlePlan shows the plan captured from the last task.
+func (r *REPL) handlePlan() {
+	if r.lastPlan == "" {
+		fmt.Fprintln(r.Out, tui.Muted("No plan recorded yet. Plans appear when the model proposes numbered steps for a task."))
+		return
+	}
+	fmt.Fprintln(r.Out, tui.Header("Last Plan"))
+	fmt.Fprintln(r.Out, r.lastPlan)
+}
+
+// handleCompact compacts conversation history, keeping the first user
+// message (the task anchor) and the most recent turns.
+func (r *REPL) handleCompact() {
+	const keepRecent = 6
+	if len(r.History) <= keepRecent+1 {
+		fmt.Fprintln(r.Out, tui.Muted(fmt.Sprintf("History is already compact (%d messages).", len(r.History))))
+		return
+	}
+	dropped := len(r.History) - keepRecent - 1
+	compacted := []Message{r.History[0]}
+	compacted = append(compacted, Message{
+		Role:    "system",
+		Content: fmt.Sprintf("[history compacted: %d earlier messages summarized away]", dropped),
+	})
+	compacted = append(compacted, r.History[len(r.History)-keepRecent:]...)
+	r.History = compacted
+	fmt.Fprintf(r.Out, "%s\n", tui.Success(fmt.Sprintf("✓ Compacted: removed %d older messages.", dropped)))
+}
+
+// handlePermissions prints the current permission policy.
+func (r *REPL) handlePermissions() {
+	fmt.Fprintln(r.Out, tui.Box("Permissions", []string{
+		fmt.Sprintf("%s %s", tui.Muted("Read tools        :"), tui.Success("automatic")),
+		fmt.Sprintf("%s %s", tui.Muted("File writes/edits :"), tui.Warning("approval required")),
+		fmt.Sprintf("%s %s", tui.Muted("File deletion     :"), tui.Warning("approval required (always)")),
+		fmt.Sprintf("%s %s", tui.Muted("Safe commands     :"), tui.Success("automatic (go test, git status, ...)")),
+		fmt.Sprintf("%s %s", tui.Muted("Other commands    :"), tui.Warning("approval required")),
+		fmt.Sprintf("%s %s", tui.Muted("Blocked commands  :"), tui.Error("never executed")),
+		fmt.Sprintf("%s %s", tui.Muted("Git commit/push   :"), tui.Error("never automatic")),
+	}))
+}
+
+// handleRollback reverts the last APCode change set via the journal.
+func (r *REPL) handleRollback() {
+	if r.Journal == nil || r.Journal.UndoCount() == 0 {
+		fmt.Fprintln(r.Out, tui.Muted("Nothing to roll back — no APCode changes recorded in this session."))
+		return
+	}
+	fmt.Fprintln(r.Out, tui.Muted("Reverting the last APCode change..."))
+	restored, err := r.Journal.Undo()
+	if err != nil {
+		fmt.Fprintf(r.Out, "%s %v\n", tui.Error("✗ Rollback failed:"), err)
+		return
+	}
+	if len(restored) == 0 {
+		fmt.Fprintln(r.Out, tui.Muted("No files were changed in that operation."))
+		return
+	}
+	fmt.Fprintf(r.Out, "%s Restored %d file(s):\n", tui.Success("✓"), len(restored))
+	for _, p := range restored {
+		fmt.Fprintf(r.Out, "  %s\n", tui.Muted(p))
+	}
 }

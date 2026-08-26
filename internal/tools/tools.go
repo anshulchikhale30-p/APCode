@@ -311,10 +311,7 @@ func DefaultRegistry() *Registry {
 	_ = r.Register(NewGitDiffTool())
 	_ = r.Register(NewGitStatusTool())
 	_ = r.Register(NewGitLogTool())
-	// Aliases for backward compatibility (snake_case without workspace)
-	// The primary tools already cover normalized lookup, so extra aliases not needed,
-	// but we keep ListFiles alias as "list_files" is historically used.
-	// To avoid normalized collision, we rely on normalized map, so no duplicate needed.
+	registerExtendedTools(r, ".")
 	return r
 }
 
@@ -334,7 +331,22 @@ func DefaultRegistryWithWorkspace(workspace string) (*Registry, error) {
 	_ = r.Register(NewGitDiffTool(ws))
 	_ = r.Register(NewGitStatusTool(ws))
 	_ = r.Register(NewGitLogTool(ws))
+	registerExtendedTools(r, ws)
 	return r, nil
+}
+
+// registerExtendedTools registers the spec-named tools (create_file,
+// delete_file, apply_patch, project_info) and validation tools
+// (run_tests, run_build, run_lint). Registration errors are ignored for the
+// same reason as above: these constructors always produce valid tools.
+func registerExtendedTools(r *Registry, ws string) {
+	_ = r.Register(NewCreateFileTool(ws))
+	_ = r.Register(NewDeleteFileTool(ws))
+	_ = r.Register(NewApplyPatchTool(ws))
+	_ = r.Register(NewProjectInfoTool(ws))
+	for _, t := range newValidationTools(ws) {
+		_ = r.Register(t)
+	}
 }
 
 // DefinitionsForPrompt returns tool definitions formatted for inclusion in model prompts.
@@ -469,6 +481,11 @@ func validatePath(workspace, p string) (string, error) {
 	if strings.Contains(p, "..") {
 		// Already handled via rel, but extra check for normalized case
 		_ = rel
+	}
+	// Symlink hardening: ensure the real path (after resolving symlinks in
+	// existing components) stays inside the workspace.
+	if err := hardenPathAgainstSymlinks(ws, abs); err != nil {
+		return "", err
 	}
 	return abs, nil
 }

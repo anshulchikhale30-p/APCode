@@ -5,27 +5,32 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"apcode/internal/tools"
 )
 
-func TestIsDangerousCommand(t *testing.T) {
+func TestCommandClassification(t *testing.T) {
 	tests := []struct {
-		cmd       string
-		dangerous bool
+		cmd  string
+		want tools.CommandClass
 	}{
-		{"rm -rf /", true},
-		{"del file.txt", true},
-		{"rmdir /s /q", true},
-		{"format C:", true},
-		{"git reset --hard", true},
-		{"git clean -fd", true},
-		{"go test ./...", false},
-		{"npm test", false},
-		{"ls -la", false},
-		{"echo hello", false},
+		{"rm -rf /", tools.ClassBlocked},
+		{"format C:", tools.ClassBlocked},
+		{"mkfs.ext4 /dev/sda", tools.ClassBlocked},
+		{"del file.txt", tools.ClassApprovalRequired},
+		{"rmdir /s /q", tools.ClassApprovalRequired},
+		{"git reset --hard", tools.ClassApprovalRequired},
+		{"git clean -fd", tools.ClassApprovalRequired},
+		{"npm install left-pad", tools.ClassApprovalRequired},
+		{"go test ./...", tools.ClassSafe},
+		{"npm test", tools.ClassSafe},
+		{"git status", tools.ClassSafe},
+		{"ls -la", tools.ClassSafe},
+		{"echo hello", tools.ClassSafe},
 	}
 	for _, tt := range tests {
-		if got := isDangerousCommand(tt.cmd); got != tt.dangerous {
-			t.Errorf("isDangerousCommand(%q)=%v want %v", tt.cmd, got, tt.dangerous)
+		if got := tools.ClassifyCommand(tt.cmd); got != tt.want {
+			t.Errorf("ClassifyCommand(%q)=%v want %v", tt.cmd, got, tt.want)
 		}
 	}
 }
