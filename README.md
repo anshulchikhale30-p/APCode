@@ -11,7 +11,7 @@ It understands your project, works with local models, provides an interactive TU
 
 <div align="center">
 
-### 🚀 APCode v0.1.6
+### 🚀 APCode v0.1.7
 
 **AI-powered coding • Local-first • Terminal-native • Cross-platform**
 
@@ -75,7 +75,7 @@ You get a terminal-native workspace with:
 
 ```text
                          APCode
-                         v0.1.6
+                         v0.1.7
 
 Go · 126 files · Git: main
 
@@ -90,7 +90,7 @@ Go · 126 files · Git: main
      ctrl+p commands   tab     agents
 
 
-~/APCode:main                                      v0.1.6
+~/APCode:main                                      v0.1.7
 
 › Fix the authentication bug
 
