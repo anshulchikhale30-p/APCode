@@ -45,6 +45,22 @@ func TerminalWidth() int {
 	return w
 }
 
+// TerminalHeight returns the current terminal height in rows, or 24 when
+// it cannot be determined. Handling tea.WindowSizeMsg uses both dimensions.
+func TerminalHeight() int {
+	h, _, _ := procGetStdHandle.Call(stdOutputHandle)
+	var info consoleScreenBufferInfo
+	r, _, _ := procGetConsoleScreenBuffer.Call(h, uintptr(unsafe.Pointer(&info)))
+	if r == 0 {
+		return defaultTermHeight
+	}
+	ht := int(info.Window.Bottom-info.Window.Top) + 1
+	if ht <= 0 {
+		return defaultTermHeight
+	}
+	return ht
+}
+
 // IsTerminalWriter reports whether w is attached to a character device
 // (a real terminal), which gates animation and cursor tricks.
 func IsTerminalWriter(w interface{ Write([]byte) (int, error) }) bool {

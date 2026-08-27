@@ -136,6 +136,15 @@ func TestStyleWithColorsEnabled(t *testing.T) {
 	prev := ColorsEnabled()
 	SetColorsEnabled(true)
 	defer func() { SetColorsEnabled(prev) }()
+	prevBg := GetBackgroundColor()
+	ClearBackgroundColor()
+	defer func() {
+		if prevBg != "" {
+			_ = SetBackgroundColor(prevBg)
+		} else {
+			_ = SetBackgroundColor(defaultBackgroundHex)
+		}
+	}()
 
 	cases := []struct {
 		name string

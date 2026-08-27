@@ -29,14 +29,23 @@ func TestWelcomeScreenOutput(t *testing.T) {
 	repl.printWelcome()
 
 	o := out.String()
+	// Woven logo + version + repo summary (muted hierarchy) — not slash list
 	for _, want := range []string{
 		"APCode",
-		"/help", "/new", "/models", "/status", "/exit",
-		"Type a task and press Enter",
+		"Ask anything...",
+		"Fix broken tests",
+		"╭", "╰",
+		"enter", "send",
+		"ctrl+p", "commands",
+		"●", "Tip",
 	} {
 		if !strings.Contains(o, want) {
 			t.Errorf("welcome output missing %q", want)
 		}
+	}
+	// Slash list moved to palette/help, not front-loaded on welcome
+	if strings.Contains(o, "/help       show help") {
+		t.Errorf("welcome should not front-load slash list (moved to palette)")
 	}
 }
 

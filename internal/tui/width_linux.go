@@ -25,6 +25,17 @@ func TerminalWidth() int {
 	return int(ws.cols)
 }
 
+// TerminalHeight returns the current terminal height in rows, or 24 when
+// it cannot be determined. This powers two-column layout height via tea.WindowSizeMsg.
+func TerminalHeight() int {
+	ws := &winsize{}
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, os.Stdout.Fd(), uintptr(tiocgwinsz), uintptr(unsafe.Pointer(ws)))
+	if errno != 0 || ws.rows == 0 {
+		return defaultTermHeight
+	}
+	return int(ws.rows)
+}
+
 // IsTerminalWriter reports whether w is attached to a character device.
 func IsTerminalWriter(w interface{ Write([]byte) (int, error) }) bool {
 	f, ok := w.(*os.File)

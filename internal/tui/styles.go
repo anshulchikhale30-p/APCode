@@ -11,19 +11,23 @@ const (
 	GlyphEdit    = "✎" // file modified
 )
 
-// Additional ANSI codes for the APCode palette. All styling funnels through
-// style(), so --no-color and NO_COLOR=1 strip them automatically.
+// Additional ANSI codes — reuse the narrowed palette from color.go
+// (no new hard-coded colors here per style guide).
 const (
-	ansiAccent = "\x1b[95m" // bright magenta: APCode accent
-	ansiBorder = "\x1b[34m" // blue: box borders and rules
-	ansiInfo   = "\x1b[97m" // bright white: emphasized values
+	ansiAccent      = ansiBlue    // was bright magenta; now blue #4A9EFF for interactive/active
+	ansiBorder      = ansiBlue    // focused input box ring — blue (spec: focus indicator)
+	ansiBorderMuted = ansiDimGray // unfocused/subtle borders — dim-gray
+	ansiInfo        = ansiWhite   // emphasized values — white
 )
 
-// Accent styles text with the APCode accent color.
+// Accent styles text with the accent color (now blue).
 func Accent(s string) string { return style(ansiAccent, s) }
 
-// Border styles text used for box borders and divider rules.
+// Border styles text used for focused box borders (input box — blue).
 func Border(s string) string { return style(ansiBorder, s) }
 
-// Info styles emphasized plain values (model names, paths).
+// BorderMuted styles subtle borders/rules in dim-gray.
+func BorderMuted(s string) string { return style(ansiBorderMuted, s) }
+
+// Info styles emphasized plain values (model names, paths) in white.
 func Info(s string) string { return style(ansiInfo, s) }

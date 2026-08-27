@@ -42,6 +42,7 @@ func InputBoxBottom(width int) string {
 
 // InputBox renders a closed preview of the input box with the given text
 // inside. Used by tests, help screens, and non-interactive rendering.
+// Kept for backward compat; the welcome screen now uses InputBoxTwoRow.
 func InputBox(width int, text string) string {
 	var b strings.Builder
 	b.WriteString(InputBoxTop(width))
@@ -55,6 +56,141 @@ func InputBox(width int, text string) string {
 		b.WriteString(Border("│") + "  " + Accent("› ") + line + strings.Repeat(" ", pad) + Border("│"))
 		b.WriteByte('\n')
 	}
+	b.WriteString(InputBoxBottom(width))
+	return b.String()
+}
+
+// --- OpenCode-inspired two-row input box (spec) ---
+
+const (
+	placeholderAsk     = "Ask anything..."
+	placeholderExample = `"Fix broken tests"`
+)
+
+// InputPlaceholder returns the faded placeholder text for row 1.
+// Kept as a helper so welcome and tests share the same literal.
+func InputPlaceholder() string { return placeholderAsk + " " + placeholderExample }
+
+// InputStatusLine builds row 2 of the input box: color-coded segments
+// joined by " · " per spec:
+//
+//	[mode, blue] · [model name, white][provider, dim gray] · [highlight, amber+bold]
+//
+// It folds the old "Type a task..." / "native · no model installed" plain line
+// into this single pattern. Empty segments are skipped.
+func InputStatusLine(mode, modelName, provider, highlight string) string {
+	var segs []string
+	if mode != "" {
+		segs = append(segs, Blue(mode))
+	}
+	if modelName != "" {
+		m := White(modelName)
+		if provider != "" {
+			// provider in dim-gray, e.g. " (ollama)" or " · ollama"
+			m += Muted(" (" + provider + ")")
+		}
+		segs = append(segs, m)
+	} else if provider != "" {
+		segs = append(segs, Muted(provider))
+	} else {
+		// no model name and no provider: surface "no model installed" as white
+		// segment when a mode is present (welcome preview for no-model state)
+		// or as part of the full fallback when even mode is missing.
+		if mode != "" && highlight == "" {
+			segs = append(segs, White("no model installed"))
+		} else if mode == "" && highlight == "" {
+			// will be handled by fallback below
+		}
+	}
+	if highlight != "" {
+		segs = append(segs, AmberBold(highlight))
+	}
+	if len(segs) == 0 {
+		// fallback for welcome preview when nothing provided — mirrors old behavior
+		segs = append(segs, Blue("native"), White("no model installed"))
+	}
+	if len(segs) == 1 {
+		// single segment (e.g. only mode or only highlight) — no separator needed
+		return segs[0]
+	}
+	// join with muted middle dot
+	sep := Muted(" · ")
+	return segs[0] + sep + joinWithSep(segs[1:], sep)
+}
+
+// joinWithSep joins already-styled segments with sep.
+func joinWithSep(segs []string, sep string) string {
+	if len(segs) == 0 {
+		return ""
+	}
+	out := segs[0]
+	for _, s := range segs[1:] {
+		out += sep + s
+	}
+	return out
+}
+
+// InputBoxTwoRow renders the welcome screen's rounded, bordered input box
+// with two rows per spec: placeholder on row 1, status segments on row 2.
+// Width is the outer box width (including borders); inner content width is width-4
+// (one border + two spaces padding on each side).
+func InputBoxTwoRow(width int, mode, modelName, provider, highlight string) string {
+	if width < 24 {
+		width = 24
+	}
+	inner := width - 4 // between borders, excluding "│ " and " │"
+	if inner < 10 {
+		inner = 10
+	}
+	// Row 1: cursor + placeholder (faded). Example task in quotes dimmed.
+	row1Plain := "› " + placeholderAsk + " " + placeholderExample
+	// Styled version for rendering
+	row1Styled := Blue("›") + " " + Muted(placeholderAsk) + " " + Muted(placeholderExample)
+	// Truncate if needed
+	if visibleWidth(row1Plain) > inner {
+		// keep cursor, truncate placeholder
+		avail := inner - 2 // for "› "
+		if avail < 4 {
+			avail = 4
+		}
+		ph := truncateVisible(Muted(placeholderAsk+" "+placeholderExample), avail)
+		row1Styled = Blue("›") + " " + ph
+		row1Plain = "› " + stripANSI(ph)
+	}
+	pad1 := inner - visibleWidth(row1Plain)
+	if pad1 < 0 {
+		pad1 = 0
+	}
+	padStr1 := strings.Repeat(" ", pad1)
+	if GetBackgroundEscape() != "" {
+		padStr1 = Background(padStr1)
+	}
+
+	status := InputStatusLine(mode, modelName, provider, highlight)
+	// Plain width for padding: stripANSI then count
+	statusPlain := stripANSI(status)
+	// If status too long, truncate with style preserved (truncateVisible handles ANSI)
+	if visibleWidth(status) > inner {
+		status = truncateVisible(status, inner)
+		statusPlain = stripANSI(status)
+	}
+	pad2 := inner - visibleWidth(statusPlain)
+	if pad2 < 0 {
+		pad2 = 0
+	}
+	padStr2 := strings.Repeat(" ", pad2)
+	if GetBackgroundEscape() != "" {
+		padStr2 = Background(padStr2)
+	}
+
+	var b strings.Builder
+	b.WriteString(InputBoxTop(width))
+	b.WriteByte('\n')
+	// Row 1 — borders are styled (include bg via style), inner content styled, pad has bg
+	b.WriteString(Border("│") + " " + row1Styled + padStr1 + " " + Border("│"))
+	b.WriteByte('\n')
+	b.WriteString(Border("│") + " " + status + padStr2 + " " + Border("│"))
+	b.WriteByte('\n')
 	b.WriteString(InputBoxBottom(width))
 	return b.String()
 }

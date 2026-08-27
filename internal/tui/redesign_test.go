@@ -18,20 +18,53 @@ func TestWelcomeScreenFullLayout(t *testing.T) {
 		Commands:    DefaultMenuCommands(),
 		ProjectLine: "Go · 42 files · Git: main",
 		Width:       100,
+		HasModel:    false,
+		Workspace:   "/home/user/APCode",
+		GitBranch:   "main",
 	})
 
+	// Narrow palette + OpenCode-inspired hierarchy: logo, version, repo summary
 	for _, want := range []string{
 		"█████╗ ██████╗",
 		"v" + config.Version,
-		"/help",
-		"/new",
-		"/models",
-		"/status",
-		"/exit",
 		"Go · 42 files · Git: main",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("welcome output missing %q", want)
+		}
+	}
+	// Two-row bordered input box with placeholder (row 1) and status segments (row 2)
+	for _, want := range []string{
+		"╭", "╰",
+		"Ask anything...",
+		"Fix broken tests",
+		"native",
+		"no model installed",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("welcome input box missing %q", want)
+		}
+	}
+	// Centered keybind hints — keys brighter than descs, generous spacing
+	for _, want := range []string{"enter", "send", "ctrl+p", "commands", "tab", "agents"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("welcome keybind hints missing %q", want)
+		}
+	}
+	// Tip line: amber dot + bold Tip, context-aware for no model
+	for _, want := range []string{"●", "Tip", "/models"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("welcome tip missing %q", want)
+		}
+	}
+	// Status bar pinned bottom: dir:branch left, version right, dim gray
+	if !strings.Contains(out, "v"+config.Version) {
+		t.Errorf("welcome status bar missing version %q", "v"+config.Version)
+	}
+	// Welcome should NOT front-load the static slash-command list (moved to palette)
+	for _, bad := range []string{"/help       show help", "/new        new session"} {
+		if strings.Contains(out, bad) {
+			t.Errorf("welcome should not contain static command list %q (moved to palette)", bad)
 		}
 	}
 	if strings.Contains(out, "\x1b[") {
