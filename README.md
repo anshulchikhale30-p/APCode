@@ -14,7 +14,7 @@
 
 APCode is an open source AI coding agent you install in your terminal. It understands your hardware, recommends the right local model, and runs 100% offline — no cloud APIs, no data leaving your machine.
 
-> **Current release: `v0.1.1`.** Precompiled binaries are published for Windows (amd64/arm64), Linux (amd64/arm64), and macOS Intel/Apple Silicon — no Go toolchain needed. The `install.sh`/`install.ps1` scripts download them automatically; `--binary` works with a local build too. `brew`/`scoop`/`npm`/`winget`/`docker` are **future/planned** and not yet published. See `CONTRIBUTING.md` and `docs/release-test.md`.
+> **Current release: `v0.1.5`.** Precompiled binaries are published for Windows (amd64/arm64), Linux (amd64/arm64), and macOS Intel/Apple Silicon — no Go toolchain needed. The `install.sh`/`install.ps1` scripts download them automatically; `--binary` works with a local build too. `brew`/`scoop`/`npm`/`winget`/`docker`/`chocolatey` are **future/planned** and not yet published. See `CONTRIBUTING.md` and `docs/release-test.md`.
 
 ---
 
@@ -33,7 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/inst
 Install a specific version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash -s -- --version 0.1.1
+curl -fsSL https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.sh | bash -s -- --version 0.1.5
 ```
 
 Install to a custom directory:
@@ -51,9 +51,9 @@ irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1
 Specific version:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1))) -Version 0.1.1
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/anshulchikhale30-p/APCode/main/install.ps1))) -Version 0.1.5
 # or if you saved it locally:
-.\install.ps1 -Version 0.1.1
+.\install.ps1 -Version 0.1.5
 ```
 
 Local binary (no download):
@@ -77,7 +77,7 @@ export PATH="$HOME/.apcode/bin:$PATH"   # bash/zsh
 Verify:
 
 ```sh
-apcode --version   # APCode 0.1.1
+apcode --version   # APCode 0.1.5
 apcode version     # same
 apcode --help
 apcode             # branded TUI + hardware
@@ -116,7 +116,7 @@ yarn global add apcode-ai
 
 **Using Homebrew (macOS & Linux) — not yet published / future:**
 
-> Formula `homebrew/apcode.rb` is a template. After a real `v0.1.1` release, a Homebrew tap could be published to `anshulchikhale30-p/homebrew-tap` (not configured for first release). Until then:
+> Formula `homebrew/apcode.rb` is a template. After a real `v0.1.5` release, a Homebrew tap could be published to `anshulchikhale30-p/homebrew-tap` (not configured for first release). Until then:
 
 ```sh
 # Build from source locally:
@@ -149,11 +149,15 @@ winget install APCode.APCode
 
 > For now, use `install.ps1`.
 
-**Using Chocolatey (Windows) — future:**
+**Using Chocolatey (Windows) — not yet published / future:**
+
+> Chocolatey package `apcode` is **not yet published** to `chocolatey.org`. After submission, users will be able to:
 
 ```powershell
 choco install apcode
 ```
+
+> For now, use `install.ps1`.
 
 **Manual binary download:**
 
@@ -161,12 +165,12 @@ Grab the binary for your platform from [Releases](https://github.com/anshulchikh
 
 | Platform | File |
 |---|---|
-| Linux amd64 | `apcode_0.1.1_linux_amd64.tar.gz` |
-| Linux arm64 | `apcode_0.1.1_linux_arm64.tar.gz` |
-| macOS Intel | `apcode_0.1.1_darwin_amd64.tar.gz` |
-| macOS Apple Silicon | `apcode_0.1.1_darwin_arm64.tar.gz` |
-| Windows amd64 | `apcode_0.1.1_windows_amd64.zip` |
-| Windows arm64 | `apcode_0.1.1_windows_arm64.zip` |
+| Linux amd64 | `apcode_0.1.5_linux_amd64.tar.gz` |
+| Linux arm64 | `apcode_0.1.5_linux_arm64.tar.gz` |
+| macOS Intel | `apcode_0.1.5_darwin_amd64.tar.gz` |
+| macOS Apple Silicon | `apcode_0.1.5_darwin_arm64.tar.gz` |
+| Windows amd64 | `apcode_0.1.5_windows_amd64.zip` |
+| Windows arm64 | `apcode_0.1.5_windows_arm64.zip` |
 
 Then:
 
@@ -178,7 +182,7 @@ apcode --version
 
 **Using Docker — planned / not yet published:**
 
-> Docker image `ghcr.io/anshulchikhale30-p/APCode` is **not yet published**. After a real `v0.1.1` GitHub release and `docker build`/`push`, users will be able to:
+> Docker image `ghcr.io/anshulchikhale30-p/APCode` is **not yet published**. After a real `v0.1.5` GitHub release and `docker build`/`push`, users will be able to:
 
 ```sh
 docker run --rm -it ghcr.io/anshulchikhale30-p/APCode --help
@@ -190,34 +194,47 @@ docker run --rm -it -v $(pwd):/work ghcr.io/anshulchikhale30-p/APCode recommend
 ## Quick Start
 
 ```sh
-# 1. Enter interactive mode (like OpenCode)
+# 0. Initialize project (creates .apcode/ + ~/.apcode/config.json)
+apcode init                          # in current dir
+apcode init --dir ./myproject        # target dir
+apcode init --dir . --force          # overwrite existing config
+
+# 1. Run the coding agent — headline feature (plan → act → observe, 16 tools, approval gates, rollback)
+apcode run "Add authentication to my Go API"
+apcode run "Fix failing tests" --model phi-3-mini-q4 --stream --max-iterations 10 --dir ./myproject --no-color
+# Full usage: apcode run <instruction> [--model <id>] [--stream] [--max-iterations N] [--dir <path>] [--no-color]
+
+# 2. Enter interactive mode (like OpenCode)
 apcode                          # starts REPL: banner + project + git + runtime + model
 
 # Or check your system non-interactively
 apcode --help
 apcode --version
 
-# 2. Benchmark your hardware (optional but improves recommendations)
+# 3. Benchmark your hardware (optional but improves recommendations)
 apcode benchmark
 
-# 3. See available models
+# 4. See available models
 apcode models
+apcode models installed
 apcode models info phi-3-mini-q4
+apcode models install phi-3-mini-q4  # local stub for offline testing (no remote download yet)
+# aliases: apcode models pull <id>  |  apcode models download <id>
 
-# 4. Get hardware-aware recommendation
+# 5. Get hardware-aware recommendation
 apcode recommend
 apcode recommend --benchmark --preference balanced
 apcode recommend --capability code_generation --preference quality
 
-# 5. Inspect project context (offline, no LLM)
+# 6. Inspect project context (offline, no LLM)
 apcode context                  # auto-detect root
 apcode context --budget 8000 --root ./myproject
 apcode search "func main" --dir ./cmd --limit 20
 
-# 6. Check runtime status
+# 7. Check runtime status
 apcode runtime
 
-# 7. Run inference (when runtime + model installed)
+# 8. Run inference (when runtime + model installed)
 apcode infer "write a hello world in Go"
 apcode infer --stream --model phi-3-mini-q4 "explain this repo"
 ```
@@ -240,9 +257,31 @@ apcode
 # You > /help
 ```
 
-Slash commands: `/help`, `/clear`, `/context`, `/models`, `/runtime`, `/diff`, `/status`, `/exit`, `/quit` (Ctrl+C is graceful, not crash).
+**Slash commands (19, verbatim from `internal/cli/repl.go`):**
 
-Conversation history is kept in memory, so follow-ups understand prior context.
+```
+   /help (/h, /?)        Show this help
+   /new (/session)        New session (clears conversation)
+   /models                List available models
+   /model                 Show the currently selected model
+   /runtime (/rt)         Show runtime status
+   /status (/st)          Show project and system status
+   /benchmark (/bench)    Run hardware benchmark
+   /context (/ctx)        Show project context summary
+   /files [dir]           List files via the agent's file tool
+   /search <query>        Search files in the workspace
+   /plan                  Show the plan from the current/last task
+   /compact               Compact conversation history
+   /permissions           Show the tool permission policy
+   /tools                 List every registered agent tool + schema
+   /git                   Show git diff + status
+   /diff                  Show git diff
+   /rollback              Revert the last APCode change set
+   /clear (/cls)          Clear screen and redraw welcome
+   /exit (/quit, /q)      Exit APCode
+```
+
+`Ctrl+C` is graceful (cancels current operation, not crash). Conversation history is kept in memory, so follow-ups understand prior context.
 
 ---
 
@@ -274,7 +313,7 @@ APCode is evolving from a local-LLM REPL into a real terminal coding agent: an i
 | Rollback journal (`/rollback` restores last change set) | **IMPLEMENTED** |
 | Git awareness (`git_status`, `git_diff`, never auto-commits) | **IMPLEMENTED** |
 | Validation after changes + bounded repair loop | **IMPLEMENTED** (repair capped at 2 attempts) |
-| REPL commands `/files /search /model /plan /compact /permissions /rollback /git` | **IMPLEMENTED** |
+| REPL slash commands (19, see Interactive REPL below) | **IMPLEMENTED** |
 | Context compaction (`/compact`, keeps task anchor + recent turns) | **IMPLEMENTED** (truncate-style summary) |
 | Model provider abstraction (`internal/provider`) over native Gemma / llama.cpp / Ollama / mock | **IMPLEMENTED** |
 | Structured model output parsing (JSON object/array/fenced/tool-marker formats) | **IMPLEMENTED** |
@@ -297,9 +336,11 @@ APCode is evolving from a local-LLM REPL into a real terminal coding agent: an i
 
 - `apcode --version` / `apcode version` — print version (both work, single source `internal/config.Version`)
 - `apcode --help` — print usage
-- `apcode` — **interactive REPL** (banner + project + git + runtime + model, slash commands, history, tool loop) — offline, no cloud
+- `apcode` — **interactive REPL** (banner + project + git + runtime + model, 19 slash commands, history, tool loop) — offline, no cloud
+- `apcode init [--dir <path>] [--force]` — initialize `.apcode` project config + `~/.apcode/config.json` (see `runInit` in `cmd/apcode/main.go`)
+- `apcode run "<instruction>" [--model <id>] [--stream] [--max-iterations N] [--dir <path>] [--no-color]` — **flagship coding agent** (plan → act → observe loop, 16 tools, approval gates, rollback) e.g. `apcode run "Add authentication to my Go API"`
 - `apcode benchmark` — hardware benchmarks (CPU ops/sec, memory bandwidth, optional storage)
-- `apcode models` — list catalog (`models installed`, `models info <id>`)
+- `apcode models` — list catalog; `models installed` / `models info <id>` / `models install|pull|download <id>` (install creates local 1 MiB stub for offline testing — no remote GGUF download yet; honest placeholder)
 - `apcode recommend` — hardware-aware ranking with explanations & uncertainty:
   - `apcode recommend --capability code_generation --preference balanced`
   - `apcode recommend --benchmark` — run benchmark first
@@ -314,14 +355,14 @@ APCode is evolving from a local-LLM REPL into a real terminal coding agent: an i
 ## Project Structure
 
 ```
-cmd/apcode/        CLI entry point (welcome, benchmark, models, recommend, context, search, runtime, infer, REPL)
+cmd/apcode/        CLI entry point (welcome, benchmark, models, recommend, context, search, runtime, infer, init, run, REPL)
 internal/
-    cli/           interactive REPL, slash commands, ProjectContext, conversation history, rollback journal
-    agent/         agent loop (plan → act → verify)
+    cli/           interactive REPL, 19 slash commands, ProjectContext, conversation history, rollback journal
+    agent/         agent loop (plan → act → verify) — invoked via `apcode run`
     provider/      model provider abstraction over runtimes
     benchmark/     real hardware measurement (CPU/memory/storage)
     codeintel/     symbol extraction, search, imports
-    config/        version and app constants (ldflags-overridable)
+    config/        version and app constants (ldflags-overridable, current 0.1.5)
     context/       project-context gathering (walk, ignore, metadata)
     git/           git integration
     hardware/      system detection (OS/arch, CPU, RAM, GPU)
@@ -329,7 +370,7 @@ internal/
     model/         model metadata, registry, BuiltInCatalog
     recommendation/hardware-aware ranking engine
     runtime/       inference runtimes (native, llama.cpp, ollama, mock)
-    tools/         agent tools (edit, filesystem, search, git diff)
+    tools/         agent tools (16 tools: edit, filesystem, search, git, validation)
     tui/           terminal rendering (welcome, benchmark, recommendation, context, search)
     verification/  output verification
 models/            reserved for local model artifacts
@@ -355,8 +396,8 @@ Requires [Go](https://go.dev) 1.26+.
 go build -o apcode ./cmd/apcode
 ./apcode --help
 
-# With version via ldflags (like GoReleaser)
-go build -ldflags "-X apcode/internal/config.Version=0.1.1" -o apcode ./cmd/apcode
+# With version via ldflags (like GoReleaser) — keep in sync with internal/config.Version (0.1.5)
+go build -ldflags "-X apcode/internal/config.Version=0.1.5" -o apcode ./cmd/apcode
 
 # Using Make (preferred)
 make build          # current platform
@@ -386,12 +427,34 @@ apcode benchmark
 # Ctrl+C cancels cleanly, memory capped at 512 MiB, storage uses temp file + Sync()
 ```
 
+### Init
+
+```sh
+apcode init                          # init current dir: creates .apcode/config.json + ~/.apcode/config.json
+apcode init --dir ./myproject        # target directory
+apcode init --dir . --force          # overwrite existing config
+# Initializes model dir (~/.apcode/models), user config, and project-local .apcode/
+```
+
+### Agent (flagship)
+
+```sh
+apcode run "Add authentication to my Go API"
+apcode run "Fix failing tests" --model phi-3-mini-q4 --stream --max-iterations 10 --dir ./myproject --no-color
+# Usage: apcode run <instruction> [--model <id>] [--stream] [--max-iterations N] [--dir <path>] [--no-color]
+# The agent loop: understands repo → plans → edits via 16 tools with approval → validates → bounded repair (2 attempts)
+```
+
 ### Models
 
 ```sh
 apcode models              # all 6 coding models (CodeLlama 7B/13B, DeepSeek 6.7B, Phi-3 Mini, Gemma 2B, Qwen2.5 7B)
 apcode models installed    # installed only (scans ~/.apcode/models)
 apcode models info phi-3-mini-q4
+apcode models install phi-3-mini-q4   # also: pull / download — same alias
+# Current behavior: creates a local 1 MiB deterministic stub file for offline testing
+# (no remote GGUF URL configured; satisfies native runtime's non-empty file check).
+# Requires approval if RAM check fails; shows progress + checksum, atomic move.
 ```
 
 ### Recommendation
@@ -497,33 +560,34 @@ rm -f $(go env GOPATH)/bin/apcode
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and `docs/release-test.md` for the clean-install test. PRs welcome!
 
-### Releasing v0.1.1
+### Releasing v0.1.5
 
-1. Ensure `internal/config.Version` is `0.1.1` (single source; `npm/package.json`, `homebrew/apcode.rb`, `scoop/apcode.json`, `packaging/winget/*.yaml` are synced on release).
+1. Ensure `internal/config.Version` is `0.1.5` (single source; `npm/package.json`, `homebrew/apcode.rb`, `scoop/apcode.json`, `packaging/winget/*.yaml` are synced on release).
 2. `go fmt ./... && go vet ./... && go test ./... -count=1 && go test -race ./...`
-3. `go build -ldflags "-X apcode/internal/config.Version=0.1.1" -o /tmp/apcode ./cmd/apcode && /tmp/apcode --version` → `APCode 0.1.1`
+3. `go build -ldflags "-X apcode/internal/config.Version=0.1.5" -o /tmp/apcode ./cmd/apcode && /tmp/apcode --version` → `APCode 0.1.5`
 4. Commit and push to `main` on GitHub remote (`anshulchikhale30-p/APCode`):
    ```sh
    git remote -v  # should be https://github.com/anshulchikhale30-p/APCode.git
    git add .
-   git commit -m "release: v0.1.1"
+   git commit -m "release: v0.1.5"
    git push -u origin main
    ```
 5. Tag and push the next release (this triggers the release workflow):
    ```sh
-   git tag v0.1.1
-   git push origin v0.1.1
+   git tag v0.1.5
+   git push origin v0.1.5
    ```
-   Pushing `v0.1.1` triggers GitHub Actions (`.github/workflows/release.yml`) which runs GoReleaser (`goreleaser release --clean`) → creates GitHub Release with:
-   - `apcode_0.1.1_linux_amd64.tar.gz`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`, `windows_amd64.zip`, `windows_arm64.zip`, `checksums.txt`.
+   Pushing `v0.1.5` triggers GitHub Actions (`.github/workflows/release.yml`) which runs GoReleaser (`goreleaser release --clean`) → creates GitHub Release with:
+   - `apcode_0.1.5_linux_amd64.tar.gz`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`, `windows_amd64.zip`, `windows_arm64.zip`, `checksums.txt`.
 6. After release, update hashes where needed (all **future / not yet published** until verified):
-   - `npm`: `cd npm && npm version 0.1.1 && npm publish` (requires `npm login`) — **future**.
+   - `npm`: `cd npm && npm version 0.1.5 && npm publish` (requires `npm login`) — **future**.
    - `homebrew`: GoReleaser would publish to a tap if configured; currently **not configured** for first release, so manually update `homebrew/apcode.rb` hashes from `checksums.txt` if needed — **future**.
    - `scoop`: Update `scoop/apcode.json` hashes and submit to `ScoopInstaller/Main` or your bucket — **future**.
    - `winget`: Follow `docs/packaging/winget.md` to replace `REPLACE_WITH_SHA256_*` and submit to `microsoft/winget-pkgs` — **future**.
-   - `docker`: `docker build --build-arg VERSION=0.1.1 -t ghcr.io/anshulchikhale30-p/APCode:0.1.1 . && docker push ghcr.io/anshulchikhale30-p/APCode:0.1.1` — **future / planned**.
+   - `docker`: `docker build --build-arg VERSION=0.1.5 -t ghcr.io/anshulchikhale30-p/APCode:0.1.5 . && docker push ghcr.io/anshulchikhale30-p/APCode:0.1.5` — **future / planned**.
+   - `chocolatey`: `choco install apcode` — **future / not yet published**.
 
-Until those publishes are verified, **do not claim** `brew install`, `scoop install`, `npm install -g apcode-ai`, `docker run`, or `winget install APCode.APCode` work. The reliable install remains `install.sh`/`install.ps1` via `curl`/`irm` or manual binary from Releases. See `docs/release-test.md` for the full test matrix.
+Until those publishes are verified, **do not claim** `brew install`, `scoop install`, `npm install -g apcode-ai`, `docker run`, `winget install APCode.APCode`, or `choco install apcode` work. The reliable install remains `install.sh`/`install.ps1` via `curl`/`irm` or manual binary from Releases. See `docs/release-test.md` for the full test matrix.
 
 ---
 
