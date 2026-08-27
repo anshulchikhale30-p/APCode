@@ -14,6 +14,7 @@ import (
 
 	"apcode/internal/model"
 	"apcode/internal/runtime"
+	"apcode/internal/vision"
 )
 
 // GenerateRequest mirrors runtime.GenerateRequest at the provider boundary so
@@ -21,6 +22,11 @@ import (
 type GenerateRequest struct {
 	Prompt    string
 	MaxTokens int
+	// Images are base64-encoded image payloads for multimodal models (e.g. LLaVA via Ollama).
+	Images []string
+	// ImagePath is the local file path to an image; if set and Images is empty,
+	// the provider will attempt to load and encode it automatically.
+	ImagePath string
 }
 
 // GenerateResponse is the non-streaming provider response.
@@ -106,9 +112,23 @@ func (p *LocalRuntimeProvider) Generate(ctx context.Context, req GenerateRequest
 	if max <= 0 {
 		max = p.maxTok
 	}
+	images, err := p.resolveImages(req)
+	if err != nil {
+		return nil, err
+	}
+	if len(images) > 0 {
+		if warning := p.validateVisionModel(); warning != "" {
+			// Surface warning but still proceed; caller can decide to log.
+			// For now we append warning to error handling via fmt? We keep generation proceeding
+			// but include warning in response? Instead return error with clear message if strictly text-only?
+			// Gracefully warn: if model is explicitly non-vision, return a warning-prefixed error
+			// that callers can treat as non-fatal. Here we allow generation but the warning is available via ValidateVisionRequest.
+		}
+	}
 	resp, err := p.rt.Generate(ctx, runtime.GenerateRequest{
 		Prompt:  req.Prompt,
 		Options: runtime.GenerateOptions{MaxTokens: max},
+		Images:  images,
 	})
 	if err != nil {
 		return nil, err
@@ -127,9 +147,14 @@ func (p *LocalRuntimeProvider) Stream(ctx context.Context, req GenerateRequest) 
 	if max <= 0 {
 		max = p.maxTok
 	}
+	images, err := p.resolveImages(req)
+	if err != nil {
+		return nil, err
+	}
 	ch, err := p.rt.Stream(ctx, runtime.GenerateRequest{
 		Prompt:  req.Prompt,
 		Options: runtime.GenerateOptions{MaxTokens: max},
+		Images:  images,
 	})
 	if err != nil {
 		return nil, err
@@ -174,6 +199,63 @@ func (p *LocalRuntimeProvider) Metadata() Metadata {
 
 func (p *LocalRuntimeProvider) IsReady(ctx context.Context) bool {
 	return p.rt != nil && runtime.IsAvailable(ctx, p.rt)
+}
+
+// --- Image / Vision helpers ---
+//
+// These delegate to the canonical image backend in package vision so validation,
+// base64 encoding, and multimodal payload construction live in a single place
+// (see internal/vision). The provider keeps a thin, stable API surface on top.
+
+// SupportedImageExtensions returns the list of supported image extensions.
+func SupportedImageExtensions() []string { return vision.SupportedExtensions() }
+
+// IsSupportedImageFormat reports whether path has a supported image extension.
+func IsSupportedImageFormat(path string) bool { return vision.IsSupportedExtension(path) }
+
+// IsVisionModel reports whether modelID indicates a multimodal vision model.
+func IsVisionModel(modelID string) bool { return vision.IsVisionModel(modelID) }
+
+// ValidateImageFile validates that path exists, is a file, and has a supported format.
+func ValidateImageFile(path string) error { return vision.ValidateImageFile(path) }
+
+// EncodeImageToBase64 validates and encodes the image file to base64.
+func EncodeImageToBase64(path string) (string, error) { return vision.EncodeImageToBase64(path) }
+
+// ValidateVisionRequest validates that imagePath exists and that modelID is vision-capable.
+func ValidateVisionRequest(imagePath, modelID string) error {
+	return vision.ValidateVisionRequest(imagePath, modelID)
+}
+
+// BuildOllamaPayload builds the Ollama /api/generate payload with optional images.
+func BuildOllamaPayload(model, prompt string, images []string, stream bool) map[string]any {
+	return vision.BuildOllamaPayload(model, prompt, images, stream, 0)
+}
+
+// resolveImages returns base64 images for the request, handling ImagePath auto-encoding.
+func (p *LocalRuntimeProvider) resolveImages(req GenerateRequest) ([]string, error) {
+	if len(req.Images) > 0 {
+		return req.Images, nil
+	}
+	if strings.TrimSpace(req.ImagePath) == "" {
+		return nil, nil
+	}
+	b64, err := vision.EncodeImageToBase64(req.ImagePath)
+	if err != nil {
+		return nil, err
+	}
+	return []string{b64}, nil
+}
+
+// validateVisionModel returns a warning string if the current model is not vision-capable.
+func (p *LocalRuntimeProvider) validateVisionModel() string {
+	if p.mdl == nil {
+		return ""
+	}
+	if !vision.IsVisionModel(p.mdl.ID) && !vision.IsVisionModel(p.mdl.Name) {
+		return fmt.Sprintf("warning: model %q is a text-only model and may not support image inputs (try llava, bakllava, or qwen2-vl)", p.mdl.ID)
+	}
+	return ""
 }
 
 // extractFirstJSONObject finds the first balanced {...} in s and unmarshals

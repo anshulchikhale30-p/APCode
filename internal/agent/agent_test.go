@@ -2,7 +2,10 @@ package agent
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -741,5 +744,75 @@ func TestAgentContextCancellationAware(t *testing.T) {
 	_, err := ag.RunWithResult(ctx, Task{Instruction: "should cancel immediately"})
 	if err == nil {
 		t.Fatal("cancelled context should return error")
+	}
+}
+
+// writeTempPNG writes a minimal valid 1x1 PNG and returns its path.
+func writeTempPNG(t *testing.T) string {
+	t.Helper()
+	const pngB64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII="
+	data, err := base64.StdEncoding.DecodeString(pngB64)
+	if err != nil {
+		t.Fatalf("decode png: %v", err)
+	}
+	p := filepath.Join(t.TempDir(), "img.png")
+	if err := os.WriteFile(p, data, 0o644); err != nil {
+		t.Fatalf("write png: %v", err)
+	}
+	return p
+}
+
+// TestAgentImagePlumbing verifies the agent encodes an attached image to base64
+// and forwards it as Images in every model request, both via ImagePath and
+// ImageBase64, and that an invalid image path is rejected.
+func TestAgentImagePlumbing(t *testing.T) {
+	ctx := context.Background()
+
+	answer := func(req runtime.GenerateRequest) (*runtime.GenerateResponse, error) {
+		return &runtime.GenerateResponse{Text: "done", TokensGenerated: 1, FinishReason: "stop"}, nil
+	}
+
+	// ImagePath -> validated and base64 encoded.
+	rt := runtime.NewMockRuntime(runtime.MockConfig{})
+	loadMockRuntime(t, rt)
+	var gotReq runtime.GenerateRequest
+	rt.GenerateFunc = func(_ context.Context, req runtime.GenerateRequest) (*runtime.GenerateResponse, error) {
+		gotReq = req
+		return answer(req)
+	}
+	ag := New(rt, nil, tools.NewRegistry(), nil, Config{MaxIterations: 2})
+	if _, err := ag.RunWithResult(ctx, Task{Instruction: "describe", ImagePath: writeTempPNG(t)}); err != nil {
+		t.Fatalf("run with image path: %v", err)
+	}
+	if len(gotReq.Images) != 1 {
+		t.Fatalf("expected 1 image in request, got %d", len(gotReq.Images))
+	}
+	if _, err := base64.StdEncoding.DecodeString(gotReq.Images[0]); err != nil {
+		t.Errorf("image not valid base64: %v", err)
+	}
+
+	// ImageBase64 -> passed through untouched.
+	rt2 := runtime.NewMockRuntime(runtime.MockConfig{})
+	loadMockRuntime(t, rt2)
+	payload := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8"
+	var gotReq2 runtime.GenerateRequest
+	rt2.GenerateFunc = func(_ context.Context, req runtime.GenerateRequest) (*runtime.GenerateResponse, error) {
+		gotReq2 = req
+		return answer(req)
+	}
+	ag2 := New(rt2, nil, tools.NewRegistry(), nil, Config{MaxIterations: 2})
+	if _, err := ag2.RunWithResult(ctx, Task{Instruction: "describe", ImageBase64: payload}); err != nil {
+		t.Fatalf("run with image base64: %v", err)
+	}
+	if len(gotReq2.Images) != 1 || gotReq2.Images[0] != payload {
+		t.Errorf("ImageBase64 not forwarded: %v", gotReq2.Images)
+	}
+
+	// Invalid image path -> error.
+	rt3 := runtime.NewMockRuntime(runtime.MockConfig{})
+	loadMockRuntime(t, rt3)
+	ag3 := New(rt3, nil, tools.NewRegistry(), nil, Config{MaxIterations: 2})
+	if _, err := ag3.RunWithResult(ctx, Task{Instruction: "describe", ImagePath: "/no/such/file.png"}); err == nil {
+		t.Error("expected error for missing image path")
 	}
 }

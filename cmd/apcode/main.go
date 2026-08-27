@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ import (
 	"apcode/internal/tools"
 	"apcode/internal/tui"
 	"apcode/internal/verification"
+	"apcode/internal/vision"
 )
 
 // commit and date are overridden at build time via ldflags:
@@ -1490,46 +1492,84 @@ func (v *simpleVerifier) Verify(ctx context.Context, dir string) (verification.R
 }
 
 func runAgent(args []string) {
-	// Handle --no-color even when passed after subcommand
-	filtered := make([]string, 0, len(args))
-	for _, a := range args {
-		if a == "--no-color" {
-			tui.SetColorsEnabled(false)
-			continue
+	// Position-independent manual flag parsing. Go's flag package stops at the
+	// first positional argument, which would break `apcode run "task" --model x`
+	// and `apcode run "task" --image x.png`. This parser accepts flags in any
+	// order relative to the instruction text.
+	modelID := ""
+	stream := false
+	maxIter := 10
+	maxTokens := 0
+	workspaceDir := "."
+	imgPath := ""
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		val := func(def string) string {
+			if strings.Contains(a, "=") {
+				return strings.SplitN(a, "=", 2)[1]
+			}
+			if i+1 < len(args) {
+				i++
+				return args[i]
+			}
+			return def
 		}
-		filtered = append(filtered, a)
+		switch {
+		case a == "--no-color":
+			tui.SetColorsEnabled(false)
+		case a == "--image" || a == "-i" || strings.HasPrefix(a, "--image=") || strings.HasPrefix(a, "-i="):
+			imgPath = val("")
+		case a == "--model" || strings.HasPrefix(a, "--model="):
+			modelID = val("")
+		case a == "--stream":
+			stream = true
+		case a == "--max-iterations" || strings.HasPrefix(a, "--max-iterations="):
+			if v := val(""); v != "" {
+				if n, err := strconv.Atoi(v); err == nil {
+					maxIter = n
+				}
+			}
+		case a == "--max-tokens" || strings.HasPrefix(a, "--max-tokens="):
+			if v := val(""); v != "" {
+				if n, err := strconv.Atoi(v); err == nil {
+					maxTokens = n
+				}
+			}
+		case a == "--dir" || strings.HasPrefix(a, "--dir="):
+			workspaceDir = val(".")
+		case strings.HasPrefix(a, "-"):
+			fmt.Fprintf(os.Stderr, "Unknown flag: %s\n", a)
+			os.Exit(1)
+		default:
+			rest = append(rest, a)
+		}
 	}
-	args = filtered
-
-	agentFlags := flag.NewFlagSet("run", flag.ExitOnError)
-	modelID := agentFlags.String("model", "", "model ID to use (default: first compatible installed)")
-	stream := agentFlags.Bool("stream", false, "stream output")
-	maxIter := agentFlags.Int("max-iterations", 10, "max agent iterations")
-	maxTokens := agentFlags.Int("max-tokens", 0, "max tokens per generation")
-	workspaceDir := agentFlags.String("dir", ".", "workspace directory")
-	agentFlags.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: apcode run <instruction> [--model <id>] [--stream] [--max-iterations N] [--dir <path>] [--no-color]\n\n")
-		fmt.Fprintf(os.Stderr, "APCode coding agent — understands the repo, plans changes, edits files, runs tests.\n\n")
-		fmt.Fprintf(os.Stderr, "Example:\n  apcode run \"Add authentication to my Go API\"\n\n")
-		agentFlags.PrintDefaults()
-	}
-	_ = agentFlags.Parse(args)
-	remaining := agentFlags.Args()
-	if len(remaining) == 0 {
-		fmt.Fprintf(os.Stderr, "usage: apcode run <instruction> [--model <id>] [--stream] [--max-iterations N]\n")
-		fmt.Fprintf(os.Stderr, "Example: apcode run \"Add authentication to my Go API\"\n")
-		os.Exit(1)
-	}
-	instruction := strings.Join(remaining, " ")
+	instruction := strings.Join(rest, " ")
 	instruction = strings.TrimSpace(instruction)
 	if instruction == "" {
-		fmt.Fprintf(os.Stderr, "instruction cannot be empty\n")
+		fmt.Fprintf(os.Stderr, "usage: apcode run <instruction> [--model <id>] [--stream] [--max-iterations N] [--dir <path>] [--image <path>] [--no-color]\n")
+		fmt.Fprintf(os.Stderr, "Example: apcode run \"Add authentication to my Go API\"\n")
+		fmt.Fprintf(os.Stderr, "         apcode run \"Describe this diagram\" --image ./diagram.png\n")
 		os.Exit(1)
 	}
 
-	wsAbs, err := filepath.Abs(*workspaceDir)
+	// Validate optional image (missing/unsupported format) before running.
+	imgPath = strings.TrimSpace(imgPath)
+	if imgPath != "" {
+		if err := vision.ValidateImageFile(imgPath); err != nil {
+			fmt.Fprintf(os.Stderr, "Image error: %v\n", err)
+			if strings.Contains(err.Error(), "unsupported") {
+				fmt.Fprintln(os.Stderr, "Supported formats: PNG (.png), JPEG (.jpg, .jpeg)")
+			}
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stdout, "%s %s\n", tui.Muted("Image:"), tui.AttachmentChip(imgPath))
+	}
+
+	wsAbs, err := filepath.Abs(workspaceDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to resolve workspace %q: %v\n", *workspaceDir, err)
+		fmt.Fprintf(os.Stderr, "Failed to resolve workspace %q: %v\n", workspaceDir, err)
 		os.Exit(1)
 	}
 	if info, err := os.Stat(wsAbs); err != nil || !info.IsDir() {
@@ -1665,15 +1705,15 @@ func runAgent(args []string) {
 		} else {
 			// Load real model
 			var meta *model.ModelMetadata
-			if *modelID != "" {
-				m, ok := registry.Get(*modelID)
+			if modelID != "" {
+				m, ok := registry.Get(modelID)
 				if !ok {
-					fmt.Fprintf(os.Stderr, "Model not found: %s\n", *modelID)
+					fmt.Fprintf(os.Stderr, "Model not found: %s\n", modelID)
 					os.Exit(1)
 				}
-				state, ok := manager.GetInstallState(*modelID)
+				state, ok := manager.GetInstallState(modelID)
 				if !ok || !state.Installed {
-					fmt.Fprintf(os.Stderr, "Model not installed: %s\n", *modelID)
+					fmt.Fprintf(os.Stderr, "Model not installed: %s\n", modelID)
 					os.Exit(1)
 				}
 				m.Installed = true
@@ -1705,7 +1745,7 @@ func runAgent(args []string) {
 		}
 	}
 
-	if *maxTokens != 0 {
+	if maxTokens != 0 {
 		_ = maxTokens
 	}
 
@@ -1719,7 +1759,7 @@ func runAgent(args []string) {
 
 	verifier := &simpleVerifier{dir: wsAbs}
 
-	maxIters := *maxIter
+	maxIters := maxIter
 	if maxIters <= 0 {
 		maxIters = 10
 	}
@@ -1729,7 +1769,7 @@ func runAgent(args []string) {
 
 	ag := agent.New(rt, provider, toolRegistry, verifier, agent.Config{
 		MaxIterations:     maxIters,
-		EnableStreaming:   *stream,
+		EnableStreaming:   stream,
 		SystemPrompt:      "You are APCode, an offline-first AI coding agent. Understand the repository, plan changes, use tools to edit files, run tests, and verify results. Be concise.",
 		VerificationDir:   wsAbs,
 		StreamingCallback: func(tok string) { fmt.Print(tok) },
@@ -1750,7 +1790,7 @@ func runAgent(args []string) {
 	fmt.Fprintln(os.Stdout)
 
 	start := time.Now()
-	result, err := ag.RunWithResult(ctx, agent.Task{Instruction: instruction})
+	result, err := ag.RunWithResult(ctx, agent.Task{Instruction: instruction, ImagePath: imgPath})
 	duration := time.Since(start)
 
 	if err != nil && result == nil {

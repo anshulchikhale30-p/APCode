@@ -72,6 +72,9 @@ type GenerateRequest struct {
 	Prompt string `json:"prompt"`
 	// Options configures generation behaviour.
 	Options GenerateOptions `json:"options,omitempty"`
+	// Images are base64-encoded image payloads for multimodal models (e.g. LLaVA, BakLLaVA, Qwen2-VL via Ollama).
+	// When non-empty the runtime should include them as "images" in the Ollama payload.
+	Images []string `json:"images,omitempty"`
 }
 
 // GenerateResponse is the result of a non-streaming generation.

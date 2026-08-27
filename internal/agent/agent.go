@@ -34,6 +34,7 @@ import (
 	"apcode/internal/runtime"
 	"apcode/internal/tools"
 	"apcode/internal/verification"
+	"apcode/internal/vision"
 )
 
 // Sentinel errors.
@@ -55,6 +56,10 @@ const (
 // Task is a unit of work requested by the user.
 type Task struct {
 	Instruction string
+	// ImagePath is an optional local image file for multimodal vision models (PNG, JPEG).
+	ImagePath string
+	// ImageBase64 is base64-encoded image data; if set it takes precedence over ImagePath.
+	ImageBase64 string
 }
 
 // Config controls agent loop behaviour.
@@ -121,6 +126,9 @@ type Agent struct {
 	registry *tools.Registry
 	verifier verification.Verifier
 	cfg      Config
+	// pendingImages holds base64-encoded image payloads for the current task,
+	// sent with every generation to multimodal (vision) models.
+	pendingImages []string
 }
 
 // AgentInterface defines the agent execution contract.
@@ -182,6 +190,18 @@ func (a *Agent) RunWithResult(ctx context.Context, t Task) (*Result, error) {
 	}
 	if a.rt == nil {
 		return nil, ErrNoRuntime
+	}
+
+	// Resolve optional multimodal image for vision models (PNG/JPEG -> base64).
+	a.pendingImages = nil
+	if t.ImageBase64 != "" {
+		a.pendingImages = []string{t.ImageBase64}
+	} else if strings.TrimSpace(t.ImagePath) != "" {
+		b64, err := vision.EncodeImageToBase64(t.ImagePath)
+		if err != nil {
+			return nil, fmt.Errorf("agent: invalid image: %w", err)
+		}
+		a.pendingImages = []string{b64}
 	}
 
 	// 1. Context gathering (with cancellation and error recovery).
@@ -466,6 +486,7 @@ func (a *Agent) invokeGenerate(ctx context.Context, prompt string) (string, erro
 	}
 	req := runtime.GenerateRequest{
 		Prompt: prompt,
+		Images: a.pendingImages,
 	}
 	resp, err := a.rt.Generate(ctx, req)
 	if err != nil {
@@ -487,6 +508,7 @@ func (a *Agent) invokeStream(ctx context.Context, prompt string) (string, error)
 	}
 	req := runtime.GenerateRequest{
 		Prompt: prompt,
+		Images: a.pendingImages,
 	}
 	ch, err := a.rt.Stream(ctx, req)
 	if err != nil {

@@ -23,6 +23,7 @@ import (
 	"apcode/internal/runtime"
 	"apcode/internal/tools"
 	"apcode/internal/tui"
+	"apcode/internal/vision"
 )
 
 // REPL is the interactive terminal session.
@@ -46,6 +47,8 @@ type REPL struct {
 	CmdHistory  []string // previously entered commands/prompts
 	lastPlan    string
 	reader      *bufio.Reader
+	// Image attachment for multimodal vision (local PNG/JPEG). Cleared after prompt sent or /clear.
+	AttachedImage string
 }
 
 // Message is a conversation turn.
@@ -175,6 +178,29 @@ func (r *REPL) Run(ctx context.Context) error {
 		}
 
 		boxWidth := tui.BoxWidth(r.uiWidth())
+		// Show attachment chip above input box when image is loaded (TUI chip integration).
+		if r.AttachedImage != "" {
+			chipLine := tui.AttachmentChip(r.AttachedImage)
+			mode := r.RuntimeName
+			if mode == "" && r.Runtime != nil {
+				mode = string(r.Runtime.Type())
+			}
+			if mode == "" {
+				mode = "native"
+			}
+			modelName := ""
+			if r.Model != nil {
+				modelName = r.Model.ID
+			}
+			// Render chip • runtime • model for visibility in both CLI and TUI.
+			status := tui.InputStatusLineWithImage(mode, modelName, "", "", r.AttachedImage)
+			// Fallback: at least show chip line if status is empty.
+			if status != "" {
+				fmt.Fprintln(r.Out, tui.Muted("Attached: ")+chipLine+tui.Muted("  ")+status)
+			} else {
+				fmt.Fprintln(r.Out, tui.Muted("Attached: ")+chipLine)
+			}
+		}
 		fmt.Fprintln(r.Out, tui.InputBoxTop(boxWidth))
 		fmt.Fprint(r.Out, tui.InputBoxPrefix())
 
@@ -269,6 +295,10 @@ func (r *REPL) Run(ctx context.Context) error {
 			response, err := r.runAgent(agentCtx, input)
 			cancel()
 			r.Journal.EndGroup()
+			// Clear image attachment automatically once prompt is sent (spec).
+			if r.AttachedImage != "" {
+				r.AttachedImage = ""
+			}
 			if err != nil {
 				if err == context.Canceled {
 					fmt.Fprintln(r.Out, tui.ActivityLine(tui.ActivityWarning, "Cancelled."))
@@ -351,18 +381,19 @@ func (r *REPL) printWelcome() {
 		}
 	}
 	fmt.Fprint(r.Out, tui.WelcomeScreen(tui.WelcomeOptions{
-		Version:     config.Version,
-		Commands:    tui.DefaultMenuCommands(), // kept for compat; WelcomeScreen ignores it
-		ProjectLine: r.projectLine(),
-		Width:       width,
-		Height:      height,
-		Mode:        mode,
-		ModelName:   modelName,
-		Provider:    provider,
-		Highlight:   highlight,
-		HasModel:    hasModel,
-		Workspace:   r.Workspace,
-		GitBranch:   r.GitBranch,
+		Version:       config.Version,
+		Commands:      tui.DefaultMenuCommands(), // kept for compat; WelcomeScreen ignores it
+		ProjectLine:   r.projectLine(),
+		Width:         width,
+		Height:        height,
+		Mode:          mode,
+		ModelName:     modelName,
+		Provider:      provider,
+		Highlight:     highlight,
+		HasModel:      hasModel,
+		Workspace:     r.Workspace,
+		GitBranch:     r.GitBranch,
+		AttachedImage: r.AttachedImage,
 	}))
 }
 
@@ -399,15 +430,20 @@ func (r *REPL) modelIndicatorText() string {
 
 func (r *REPL) handleSlashCommand(ctx context.Context, input string) bool {
 	raw := strings.TrimSpace(input)
-	cmd := strings.ToLower(raw)
-	parts := strings.Fields(cmd)
-	base := parts[0]
-	switch base {
+	parts := strings.Fields(raw) // preserve original case for path
+	if len(parts) == 0 {
+		return false
+	}
+	lowerBase := strings.ToLower(parts[0])
+	switch lowerBase {
 	case "/help", "/h", "/?":
 		r.printHelp()
 	case "/clear", "/cls":
+		r.AttachedImage = ""
 		fmt.Fprint(r.Out, "\033[H\033[2J")
 		r.printWelcome()
+	case "/image", "/attach":
+		r.handleImageAttach(raw)
 	case "/new", "/session":
 		r.handleNewSession()
 	case "/context", "/ctx":
@@ -468,6 +504,8 @@ func (r *REPL) printHelp() {
 		{"/context", "Show project context summary"},
 		{"/files [dir]", "List files via the agent's file tool"},
 		{"/search <query>", "Search files in the workspace"},
+		{"/image <path>", "Attach local image (PNG/JPEG) for vision"},
+		{"/attach <path>", "Alias for /image"},
 		{"/plan", "Show the plan from the current/last task"},
 		{"/todos", "Show live todo checklist"},
 		{"/dashboard", "Show two-column session dashboard"},
@@ -783,7 +821,27 @@ func (r *REPL) runAgent(ctx context.Context, prompt string) (string, error) {
 			fullPrompt = fmt.Sprintf("Project: %s (%d files)\n%s\n\nUser: %s", r.Workspace, len(r.ProjectCtx.Files), historyStr, prompt)
 		}
 		fullPrompt = systemPrompt + "\n\n" + fullPrompt
-		req := runtime.GenerateRequest{Prompt: fullPrompt, Options: runtime.GenerateOptions{MaxTokens: 512}}
+		// Include attached image for multimodal vision (encode to base64 for Ollama LLaVA etc.)
+		var reqImages []string
+		if r.AttachedImage != "" {
+			if err := vision.ValidateImageFile(r.AttachedImage); err != nil {
+				fmt.Fprintf(r.Out, "%s Image error: %v\n", tui.Warning("⚠"), err)
+			} else {
+				if r.Model != nil && !vision.IsVisionModel(r.Model.ID) {
+					fmt.Fprintf(r.Out, "%s Model %q may not support vision inputs (text-only model).\n", tui.Warning("⚠"), r.Model.ID)
+					fmt.Fprintln(r.Out, tui.Muted("Try llava, bakllava, or qwen2-vl for image understanding."))
+				}
+				if b64, err := vision.EncodeImageToBase64(r.AttachedImage); err == nil {
+					reqImages = []string{b64}
+					if iter == 0 {
+						fmt.Fprintf(r.Out, "%s Sending %s with prompt\n", tui.Success("→"), tui.AttachmentChip(r.AttachedImage))
+					}
+				} else {
+					fmt.Fprintf(r.Out, "%s Failed to encode image: %v\n", tui.Warning("⚠"), err)
+				}
+			}
+		}
+		req := runtime.GenerateRequest{Prompt: fullPrompt, Options: runtime.GenerateOptions{MaxTokens: 512}, Images: reqImages}
 		var resp *runtime.GenerateResponse
 		var err error
 		if iter == 0 {
@@ -1536,6 +1594,73 @@ func (r *REPL) handleTodos() {
 		todos = append(todos, tui.TodoItem{Title: line, State: state})
 	}
 	fmt.Fprintln(r.Out, tui.RenderTodoList(todos, r.uiWidth()))
+}
+
+// handleImageAttach handles /image and /attach slash commands for multimodal vision.
+// It validates the image file, checks format, warns on non-vision models, and stores the attachment.
+func (r *REPL) handleImageAttach(raw string) {
+	// Extract path after command: "/image <path>" or "/attach <path>"
+	parts := strings.Fields(raw)
+	if len(parts) < 2 {
+		fmt.Fprintln(r.Out, tui.Warning("Usage: /image <path>  (PNG, JPEG)"))
+		fmt.Fprintln(r.Out, tui.Muted("Example: /image ./photo.png  or  /attach /tmp/image.jpg"))
+		return
+	}
+	// Support paths with spaces: join remaining parts and trim quotes
+	path := strings.TrimSpace(strings.TrimPrefix(raw, parts[0]))
+	path = strings.TrimSpace(path)
+	// Remove surrounding quotes if present
+	if len(path) >= 2 && ((path[0] == '"' && path[len(path)-1] == '"') || (path[0] == '\'' && path[len(path)-1] == '\'')) {
+		path = path[1 : len(path)-1]
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		fmt.Fprintln(r.Out, tui.Warning("Image path cannot be empty"))
+		return
+	}
+	// Validate image file (missing, unsupported format, etc.)
+	if err := vision.ValidateImageFile(path); err != nil {
+		fmt.Fprintf(r.Out, "%s %v\n", tui.Error("✗ Image error:"), err)
+		if strings.Contains(err.Error(), "unsupported") {
+			fmt.Fprintln(r.Out, tui.Muted("Supported formats: PNG (.png), JPEG (.jpg, .jpeg)"))
+		}
+		return
+	}
+	// Warn if model is not vision-capable (text-only models)
+	modelID := ""
+	if r.Model != nil {
+		modelID = r.Model.ID
+	}
+	if modelID != "" && !vision.IsVisionModel(modelID) {
+		fmt.Fprintf(r.Out, "%s Model %q may not support vision inputs (text-only model).\n", tui.Warning("⚠"), modelID)
+		fmt.Fprintln(r.Out, tui.Muted("Try a vision model such as llava, bakllava, or qwen2-vl for best results."))
+		// Still attach but warn; do not block
+	}
+	// Optionally verify we can encode to base64 (checks read + encode)
+	if _, err := vision.EncodeImageToBase64(path); err != nil {
+		fmt.Fprintf(r.Out, "%s %v\n", tui.Error("✗ Failed to encode image:"), err)
+		return
+	}
+	r.AttachedImage = path
+	chip := tui.AttachmentChip(path)
+	mode := r.RuntimeName
+	if mode == "" && r.Runtime != nil {
+		mode = string(r.Runtime.Type())
+	}
+	if mode == "" {
+		mode = "ollama"
+	}
+	modelName := ""
+	if r.Model != nil {
+		modelName = r.Model.ID
+	} else {
+		modelName = "qwen2-vl"
+	}
+	// Show chip integration: [📁 filename.png] • ollama • qwen2-vl
+	line := tui.InputStatusLineWithImage(mode, modelName, "", "", path)
+	fmt.Fprintf(r.Out, "%s Attached %s\n", tui.Success("✓"), chip)
+	fmt.Fprintln(r.Out, tui.Muted("Status: ")+line)
+	fmt.Fprintln(r.Out, tui.Muted("The image will be sent with your next prompt and cleared after. Use /clear to remove it."))
 }
 
 // handleWindowSizeMsg demonstrates explicit tea.WindowSizeMsg handling for

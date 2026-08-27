@@ -33,6 +33,8 @@ type WelcomeOptions struct {
 	Workspace string // for status bar, e.g. "~/APCode" or absolute; optional
 	GitBranch string // for status bar; optional
 	TipText   string // override tip sentence; empty => auto
+
+	AttachedImage string // optional image attachment path to show chip, e.g. "/tmp/photo.png"
 }
 
 // WelcomeScreen renders the full startup screen in the OpenCode-inspired
@@ -77,7 +79,7 @@ func WelcomeScreen(o WelcomeOptions) string {
 		modeVal = "native"
 	}
 	// Fold old plain lines into the status row pattern
-	boxStr := InputBoxTwoRow(boxW, modeVal, o.ModelName, o.Provider, o.Highlight)
+	boxStr := InputBoxTwoRowWithImage(boxW, modeVal, o.ModelName, o.Provider, o.Highlight, o.AttachedImage)
 	for _, line := range strings.Split(boxStr, "\n") {
 		if line == "" {
 			continue

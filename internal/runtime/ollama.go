@@ -266,6 +266,9 @@ func (r *OllamaRuntime) generateOnce(ctx context.Context, req GenerateRequest) (
 		"prompt": req.Prompt,
 		"stream": false,
 	}
+	if len(req.Images) > 0 {
+		payload["images"] = req.Images
+	}
 	opts := map[string]any{}
 	if req.Options.MaxTokens > 0 {
 		opts["num_predict"] = req.Options.MaxTokens
@@ -419,6 +422,9 @@ func (r *OllamaRuntime) Stream(ctx context.Context, req GenerateRequest) (<-chan
 		"model":  r.loadedModelName(),
 		"prompt": req.Prompt,
 		"stream": true,
+	}
+	if len(req.Images) > 0 {
+		payload["images"] = req.Images
 	}
 	opts := map[string]any{}
 	if req.Options.MaxTokens > 0 {

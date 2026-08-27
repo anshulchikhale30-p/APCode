@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"strings"
 )
 
@@ -71,6 +72,19 @@ const (
 // Kept as a helper so welcome and tests share the same literal.
 func InputPlaceholder() string { return placeholderAsk + " " + placeholderExample }
 
+// AttachmentChip returns the display string for an attached image, e.g. "[📁 photo.png]".
+// It is styled muted so it appears as a subtle chip in the input status line.
+func AttachmentChip(imagePath string) string {
+	if strings.TrimSpace(imagePath) == "" {
+		return ""
+	}
+	base := filepath.Base(imagePath)
+	if base == "." || base == "" {
+		base = imagePath
+	}
+	return Muted("[📁 " + base + "]")
+}
+
 // InputStatusLine builds row 2 of the input box: color-coded segments
 // joined by " · " per spec:
 //
@@ -79,7 +93,16 @@ func InputPlaceholder() string { return placeholderAsk + " " + placeholderExampl
 // It folds the old "Type a task..." / "native · no model installed" plain line
 // into this single pattern. Empty segments are skipped.
 func InputStatusLine(mode, modelName, provider, highlight string) string {
+	return InputStatusLineWithImage(mode, modelName, provider, highlight, "")
+}
+
+// InputStatusLineWithImage is like InputStatusLine but prepends an attachment chip
+// when imagePath is non-empty, producing e.g. "[📁 photo.png] · ollama · qwen2-vl".
+func InputStatusLineWithImage(mode, modelName, provider, highlight, imagePath string) string {
 	var segs []string
+	if chip := AttachmentChip(imagePath); chip != "" {
+		segs = append(segs, chip)
+	}
 	if mode != "" {
 		segs = append(segs, Blue(mode))
 	}
@@ -135,6 +158,11 @@ func joinWithSep(segs []string, sep string) string {
 // Width is the outer box width (including borders); inner content width is width-4
 // (one border + two spaces padding on each side).
 func InputBoxTwoRow(width int, mode, modelName, provider, highlight string) string {
+	return InputBoxTwoRowWithImage(width, mode, modelName, provider, highlight, "")
+}
+
+// InputBoxTwoRowWithImage is like InputBoxTwoRow but includes an attachment chip when imagePath is set.
+func InputBoxTwoRowWithImage(width int, mode, modelName, provider, highlight, imagePath string) string {
 	if width < 24 {
 		width = 24
 	}
@@ -166,7 +194,7 @@ func InputBoxTwoRow(width int, mode, modelName, provider, highlight string) stri
 		padStr1 = Background(padStr1)
 	}
 
-	status := InputStatusLine(mode, modelName, provider, highlight)
+	status := InputStatusLineWithImage(mode, modelName, provider, highlight, imagePath)
 	// Plain width for padding: stripANSI then count
 	statusPlain := stripANSI(status)
 	// If status too long, truncate with style preserved (truncateVisible handles ANSI)
